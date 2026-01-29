@@ -56,6 +56,15 @@
             visibility: visible;
         }
     </style>
+    <script>
+        if ('serviceWorker' in navigator) {
+            window.addEventListener('load', () => {
+                navigator.serviceWorker.register('./sw.js')
+                    .then(reg => console.log('SW registado!', reg.scope))
+                    .catch(err => console.log('SW falhou:', err));
+            });
+        }
+    </script>
 </head>
 
 <body class="bg-slate-950 text-slate-100 font-sans p-4 min-h-screen">
