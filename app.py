@@ -15,7 +15,10 @@ CORS(app, resources={r"/*": {"origins": "*"}})
 
 login_manager = LoginManager()
 login_manager.init_app(app)
-login_manager.login_view = 'login'
+
+@login_manager.unauthorized_handler
+def unauthorized():
+    return jsonify({'error': 'Unauthorized', 'authenticated': False}), 401
 
 DB_FILE = 'mikromon.db'
 BACKUP_BASE_DIR = '/home/sairo/Antigravity/backups'
@@ -34,7 +37,7 @@ def get_db_connection():
     conn.row_factory = sqlite3.Row
     return conn
 
-@login_manager.loader
+@login_manager.user_loader
 def load_user(user_id):
     conn = get_db_connection()
     user = conn.execute('SELECT * FROM users WHERE id = ?', (user_id,)).fetchone()
