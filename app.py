@@ -329,6 +329,19 @@ def stats():
                     tx = int(traffic[0].get('tx-bits-per-second', 0))
             except: pass
 
+        # Temperature
+        temp = "N/A"
+        try:
+            health = api.get_resource('/system/health').get()
+            for h in health:
+                if 'name' in h and h['name'] == 'temperature':
+                    temp = h['value']
+                    break
+                elif 'temperature' in h:
+                    temp = h['temperature']
+                    break
+        except: pass
+
         connection.disconnect()
 
         # Backup Status
@@ -349,7 +362,7 @@ def stats():
             "memory": resource.get('free-memory'),
             "uptime": resource.get('uptime'),
             "pppoe_active": len(pppoe),
-            "temp": "N/A",
+            "temp": temp,
             "rx_bps": rx,
             "tx_bps": tx,
             "last_backup": last_backup,
