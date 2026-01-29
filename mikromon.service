@@ -1,0 +1,13 @@
+[Unit]
+Description=MikroMon Dashboard Backend
+After=network.target
+
+[Service]
+User=root
+WorkingDirectory=/home/sairo/Antigravity
+ExecStart=/usr/bin/python3 /home/sairo/Antigravity/app.py
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
