@@ -7,6 +7,7 @@
     <title>MikroMon Dashboard</title>
     <link rel="manifest" href="manifest.json">
     <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <style>
         .card {
             background: #1e293b;
@@ -19,6 +20,10 @@
             font-size: 2.25rem;
             font-weight: 800;
             line-height: 2.5rem;
+        }
+
+        .hidden {
+            display: none !important;
         }
 
         .modal-enter {
@@ -37,6 +42,7 @@
             }
         }
 
+        /* Tooltip */
         .tooltip {
             visibility: hidden;
             position: absolute;
@@ -58,50 +64,179 @@
     </style>
     <script>
         if ('serviceWorker' in navigator) {
-            window.addEventListener('load', () => {
-                navigator.serviceWorker.register('./sw.js')
-                    .then(reg => console.log('SW registado!', reg.scope))
-                    .catch(err => console.log('SW falhou:', err));
-            });
+            window.addEventListener('load', () => { navigator.serviceWorker.register('./sw.js').catch(err => console.log('SW falhou:', err)); });
         }
     </script>
 </head>
 
-<body class="bg-slate-950 text-slate-100 font-sans p-4 min-h-screen">
+<body class="bg-slate-950 text-slate-100 font-sans p-4 min-h-screen flex flex-col">
 
-    <!-- Setup Wizard (Existing) -->
-    <div id="setupWizard" class="fixed inset-0 bg-slate-900 z-50 p-6 hidden flex flex-col justify-center">
-        <div class="max-w-md mx-auto w-full">
-            <h1 class="text-3xl font-black text-blue-500 mb-6 text-center">CONFIGURAÇÃO</h1>
-            <div id="step1" class="space-y-4">
-                <input type="text" id="rbName" placeholder="Nome do Provedor"
-                    class="w-full bg-slate-800 border border-slate-700 p-3 rounded text-white focus:outline-none focus:border-blue-500">
-                <input type="text" id="rbIp" placeholder="IP do MikroTik"
-                    class="w-full bg-slate-800 border border-slate-700 p-3 rounded text-white focus:outline-none focus:border-blue-500">
-                <input type="text" id="rbUser" placeholder="Utilizador"
-                    class="w-full bg-slate-800 border border-slate-700 p-3 rounded text-white focus:outline-none focus:border-blue-500">
-                <input type="password" id="rbPass" placeholder="Password"
-                    class="w-full bg-slate-800 border border-slate-700 p-3 rounded text-white focus:outline-none focus:border-blue-500">
-                <button onclick="checkConnection()"
-                    class="w-full bg-blue-600 hover:bg-blue-500 text-white font-bold py-3 rounded transition">CONECTAR</button>
-                <p id="connError" class="text-red-400 text-sm text-center hidden"></p>
-            </div>
-            <div id="step2" class="space-y-4 hidden">
-                <p class="text-slate-400 text-sm">Selecione a interface WAN:</p>
-                <div id="ifaceList" class="bg-slate-800 rounded p-2 max-h-64 overflow-y-auto space-y-2"></div>
-                <div class="pt-4">
-                    <label class="text-slate-400 text-xs uppercase font-bold">Velocidade WAN (Mbps)</label>
-                    <input type="number" id="wanSpeed" value="1000"
-                        class="w-full bg-slate-700 border border-slate-600 p-2 rounded text-white mt-1">
+    <!-- LOGIN SCREEN -->
+    <div id="loginScreen" class="flex-1 flex flex-col justify-center items-center hidden">
+        <div class="w-full max-w-sm">
+            <div class="text-center mb-8">
+                <div
+                    class="bg-blue-600 w-16 h-16 rounded-2xl mx-auto flex items-center justify-center mb-4 shadow-lg shadow-blue-500/30">
+                    <svg class="w-8 h-8 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                            d="M9 3v2m6-2v2M9 19v2m6-2v2M5 9H3m2 6H3m18-6h-2m2 6h-2M7 19h10a2 2 0 002-2V7a2 2 0 00-2-2H7a2 2 0 00-2 2v10a2 2 0 002 2zM9 9h6v6H9V9z">
+                        </path>
+                    </svg>
                 </div>
-                <button onclick="saveConfig()"
-                    class="w-full bg-green-600 hover:bg-green-500 text-white font-bold py-3 rounded transition mt-4">SALVAR
-                    CONFIGURAÇÃO</button>
+                <h1 class="text-3xl font-black text-white tracking-tight">MikroMon</h1>
+                <p class="text-slate-400">Entre para gerir os seus equipamentos</p>
+            </div>
+
+            <div class="bg-slate-900 border border-slate-800 p-6 rounded-2xl space-y-4 shadow-xl">
+                <div>
+                    <label class="text-xs font-bold text-slate-500 uppercase">Utilizador</label>
+                    <input type="text" id="loginUser"
+                        class="w-full bg-slate-950 border border-slate-700 p-3 rounded-lg text-white mt-1 focus:border-blue-500 focus:outline-none transition">
+                </div>
+                <div>
+                    <label class="text-xs font-bold text-slate-500 uppercase">Password</label>
+                    <input type="password" id="loginPass"
+                        class="w-full bg-slate-950 border border-slate-700 p-3 rounded-lg text-white mt-1 focus:border-blue-500 focus:outline-none transition">
+                </div>
+                <button onclick="doLogin()"
+                    class="w-full bg-blue-600 hover:bg-blue-500 text-white font-bold py-3 rounded-lg transition shadow-lg shadow-blue-600/20">ENTRAR</button>
+                <div class="text-center pt-2">
+                    <button onclick="toggleRegister()" class="text-slate-500 text-sm hover:text-white transition">Criar
+                        nova conta</button>
+                </div>
+                <p id="loginError" class="text-red-400 text-sm text-center hidden"></p>
             </div>
         </div>
     </div>
 
-    <!-- Backup Modal -->
+    <!-- ROUTER SELECTION SCREEN -->
+    <div id="routerListScreen" class="flex-1 hidden max-w-4xl mx-auto w-full pt-10">
+        <div class="flex justify-between items-center mb-8">
+            <h2 class="text-2xl font-bold text-white">Meus Equipamentos</h2>
+            <button onclick="logout()"
+                class="text-slate-400 hover:text-white text-sm bg-slate-800 px-3 py-1 rounded">Sair</button>
+        </div>
+
+        <div id="routersGrid" class="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <!-- Router Cards Injected Here -->
+        </div>
+
+        <button onclick="showAddRouterModal()"
+            class="mt-4 w-full border-2 border-dashed border-slate-700 text-slate-500 font-bold py-4 rounded-xl hover:border-blue-500 hover:text-blue-500 transition flex items-center justify-center space-x-2">
+            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path>
+            </svg>
+            <span>ADICIONAR NOVO MIKROTIK</span>
+        </button>
+    </div>
+
+    <!-- MAIN DASHBOARD -->
+    <div id="dashboardScreen" class="hidden max-w-md mx-auto w-full">
+        <header class="mb-6 mt-4 flex justify-between items-center">
+            <button onclick="exitToRouterList()" class="bg-slate-800 text-slate-400 p-2 rounded hover:text-white"><svg
+                    class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"></path>
+                </svg></button>
+            <h1 class="text-xl font-black text-blue-500 tracking-tight text-center flex-1">MIKROMON <span
+                    class="text-white text-sm font-light block" id="routerNameDisplay">DASHBOARD</span></h1>
+            <div class="w-9"></div> <!-- Spacer -->
+        </header>
+
+        <div class="grid grid-cols-1 gap-4 pb-10">
+            <!-- Backup Status -->
+            <div onclick="openBackupModal()"
+                class="card border-l-4 border-l-purple-500 flex justify-between items-center cursor-pointer hover:bg-slate-800 transition active:scale-95 group">
+                <div>
+                    <h2 class="text-slate-400 text-xs uppercase tracking-widest font-bold mb-1">Backup Automático</h2>
+                    <p id="backupDate" class="text-sm font-bold text-white">--</p>
+                    <p id="nextBackupTimer" class="text-xs text-purple-300 font-mono mt-1">Carregando...</p>
+                </div>
+                <div class="bg-purple-500/10 p-2 rounded-full group-hover:bg-purple-500/20 transition">
+                    <svg class="h-6 w-6 text-purple-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                            d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
+                    </svg>
+                </div>
+            </div>
+
+            <!-- CPU Chart -->
+            <div class="card relative overflow-hidden">
+                <h2 class="text-slate-400 text-xs uppercase tracking-widest font-bold mb-2">Processamento</h2>
+                <div class="flex justify-between items-end mb-2 relative z-10">
+                    <p id="cpu" class="stat-value text-blue-400">--%</p>
+                </div>
+                <div class="h-24 w-full"><canvas id="cpuChart"></canvas></div>
+            </div>
+
+            <!-- Traffic Chart -->
+            <div class="card relative overflow-hidden">
+                <div class="flex justify-between items-center mb-2">
+                    <h2 class="text-slate-400 text-xs uppercase tracking-widest font-bold">Tráfego WAN</h2>
+                    <div class="text-xs font-mono text-slate-500">RX: <span id="rx_val"
+                            class="text-emerald-400">--</span> TX: <span id="tx_val" class="text-blue-400">--</span>
+                    </div>
+                </div>
+                <div class="h-32 w-full"><canvas id="trafficChart"></canvas></div>
+            </div>
+
+            <!-- Stats Grid -->
+            <div class="grid grid-cols-2 gap-4">
+                <div class="card border-l-4 border-l-green-500">
+                    <h2 class="text-slate-400 text-xs uppercase tracking-widest font-bold mb-1">Clientes</h2>
+                    <p id="pppoe" class="text-2xl font-black text-green-400">--</p>
+                </div>
+                <div class="card">
+                    <h2 class="text-slate-400 text-xs uppercase tracking-widest font-bold mb-1">Memória</h2>
+                    <p id="mem" class="text-lg font-bold text-slate-300">-- MB</p>
+                </div>
+                <div class="card">
+                    <h2 class="text-slate-400 text-xs uppercase tracking-widest font-bold mb-1">Temp</h2>
+                    <p id="temp" class="text-xl font-bold text-orange-400">--°C</p>
+                </div>
+                <div class="card">
+                    <h2 class="text-slate-400 text-xs uppercase tracking-widest font-bold mb-1">Uptime</h2>
+                    <p id="uptime" class="text-xs font-mono">--</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ADD ROUTER MODAL -->
+    <div id="addRouterModal" class="fixed inset-0 bg-slate-900/95 z-50 p-6 hidden flex flex-col justify-center">
+        <div class="max-w-md mx-auto w-full">
+            <h1 class="text-2xl font-black text-blue-500 mb-6 text-center">ADICIONAR MIKROTIK</h1>
+            <div id="step1" class="space-y-4">
+                <input type="text" id="rbName" placeholder="Nome (Ex: Casa)"
+                    class="w-full bg-slate-800 border border-slate-700 p-3 rounded text-white focus:border-blue-500 focus:outline-none">
+                <input type="text" id="rbIp" placeholder="IP / Domínio DDNS"
+                    class="w-full bg-slate-800 border border-slate-700 p-3 rounded text-white focus:border-blue-500 focus:outline-none">
+                <input type="text" id="rbUser" placeholder="Utilizador Admin"
+                    class="w-full bg-slate-800 border border-slate-700 p-3 rounded text-white focus:border-blue-500 focus:outline-none">
+                <input type="password" id="rbPass" placeholder="Password"
+                    class="w-full bg-slate-800 border border-slate-700 p-3 rounded text-white focus:border-blue-500 focus:outline-none">
+                <div class="flex space-x-2">
+                    <button onclick="closeAddRouterModal()"
+                        class="flex-1 bg-slate-700 text-white font-bold py-3 rounded">CANCELAR</button>
+                    <button onclick="checkRouterConnection()"
+                        class="flex-1 bg-blue-600 text-white font-bold py-3 rounded">VERIFICAR</button>
+                </div>
+                <p id="connError" class="text-red-400 text-sm text-center hidden"></p>
+            </div>
+            <div id="step2" class="space-y-4 hidden">
+                <p class="text-slate-400 text-sm">Selecione a WAN:</p>
+                <div id="ifaceList" class="bg-slate-800 rounded p-2 max-h-64 overflow-y-auto space-y-2"></div>
+                <div class="pt-4">
+                    <label class="text-slate-400 text-xs uppercase font-bold">Velocidade (Mbps)</label>
+                    <input type="number" id="wanSpeed" value="1000"
+                        class="w-full bg-slate-700 border border-slate-600 p-2 rounded text-white mt-1">
+                </div>
+                <button onclick="confirmAddRouter()"
+                    class="w-full bg-green-600 text-white font-bold py-3 rounded mt-4">SALVAR</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- BACKUP MODAL -->
     <div id="backupModal"
         class="fixed inset-0 bg-slate-900/95 z-40 p-4 hidden flex flex-col items-center justify-center backdrop-blur-sm modal-enter">
         <div
@@ -110,138 +245,120 @@
                 class="p-4 border-b border-slate-700 flex justify-between items-center bg-slate-800 rounded-t-2xl z-20">
                 <div class="flex items-center space-x-2">
                     <h2 class="text-xl font-bold text-white">Backups</h2>
-                    <!-- Info Icon with Tooltip -->
                     <div class="has-tooltip relative cursor-pointer text-slate-400 hover:text-white">
-                        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24"
-                            stroke="currentColor">
+                        <svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
                                 d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
                         </svg>
                         <div class="tooltip mt-2">
-                            <h3 class="font-bold text-white mb-2">Política de Retenção</h3>
-                            <p class="mb-1">🤖 <strong class="text-emerald-400">Automáticos:</strong></p>
-                            <ul class="list-disc pl-4 space-y-1 mb-2 text-slate-300">
-                                <li>7 dias: Todos (1/hora)</li>
-                                <li>3 meses: 2/dia</li>
-                                <li>3 anos: 1/dia</li>
-                            </ul>
-                            <p class="mb-1">🖐️ <strong class="text-blue-400">Manuais:</strong></p>
-                            <ul class="list-disc pl-4 text-slate-300">
-                                <li>Mantidos por 5 anos</li>
-                            </ul>
+                            <p>Retenção: Auto (7d/3m/3a) e Manual (5a)</p>
                         </div>
                     </div>
                 </div>
                 <button onclick="closeBackupModal()" class="text-slate-400 hover:text-white p-2">✕</button>
             </div>
-
-            <!-- Manual Trigger -->
             <div class="p-4 border-b border-slate-700 bg-slate-900/50">
                 <button id="btnManualBackup" onclick="triggerManualBackup()"
-                    class="w-full bg-blue-600 hover:bg-blue-500 text-white font-bold py-3 rounded-lg transition flex justify-center items-center shadow-lg hover:shadow-blue-500/20">
-                    CRIAR BACKUP AGORA
-                </button>
+                    class="w-full bg-blue-600 hover:bg-blue-500 text-white font-bold py-3 rounded-lg transition">CRIAR
+                    BACKUP AGORA</button>
                 <p id="manualStatus" class="text-center text-xs text-slate-400 mt-2 hidden"></p>
             </div>
-
             <div id="backupList" class="overflow-y-auto p-4 space-y-3 flex-1"></div>
         </div>
     </div>
 
-    <!-- Main Dashboard -->
-    <header class="mb-6 mt-4 text-center">
-        <h1 id="headerTitle" class="text-3xl font-black text-blue-500 tracking-tight">MIKROMON <span
-                class="text-white text-sm font-light">PROVEDOR</span></h1>
-    </header>
-
-    <div id="mainDashboard" class="grid grid-cols-1 gap-4 max-w-md mx-auto hidden pb-10">
-        <!-- Backup Status -->
-        <div onclick="openBackupModal()"
-            class="card border-l-4 border-l-purple-500 flex justify-between items-center cursor-pointer hover:bg-slate-800 transition active:scale-95 relative overflow-hidden group">
-            <div class="z-10">
-                <h2 class="text-slate-400 text-xs uppercase tracking-widest font-bold mb-1">Backup Automático</h2>
-                <p id="backupDate" class="text-sm font-bold text-white">--</p>
-                <p id="nextBackupTimer" class="text-xs text-purple-300 font-mono mt-1">Carregando...</p>
-            </div>
-            <div class="bg-purple-500/10 p-2 rounded-full z-10 group-hover:bg-purple-500/20 transition">
-                <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 text-purple-400" fill="none" viewBox="0 0 24 24"
-                    stroke="currentColor">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                        d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
-                </svg>
-            </div>
-        </div>
-
-        <!-- CPU Chart Card -->
-        <div class="card relative overflow-hidden">
-            <h2 class="text-slate-400 text-xs uppercase tracking-widest font-bold mb-2">Processamento</h2>
-            <div class="flex justify-between items-end mb-2 relative z-10">
-                <p id="cpu" class="stat-value text-blue-400">--%</p>
-            </div>
-            <div class="h-24 w-full"><canvas id="cpuChart"></canvas></div>
-        </div>
-
-        <!-- Traffic Chart Card -->
-        <div class="card relative overflow-hidden">
-            <div class="flex justify-between items-center mb-2">
-                <h2 class="text-slate-400 text-xs uppercase tracking-widest font-bold">Tráfego WAN</h2>
-                <div class="text-xs font-mono text-slate-500">RX: <span id="rx_val" class="text-emerald-400">--</span>
-                    TX: <span id="tx_val" class="text-blue-400">--</span></div>
-            </div>
-            <div class="h-32 w-full"><canvas id="trafficChart"></canvas></div>
-        </div>
-
-        <!-- PPPoE & Memory -->
-        <div class="grid grid-cols-2 gap-4">
-            <div class="card border-l-4 border-l-green-500">
-                <h2 class="text-slate-400 text-xs uppercase tracking-widest font-bold mb-1">Clientes</h2>
-                <p id="pppoe" class="text-2xl font-black text-green-400">--</p>
-            </div>
-            <div class="card">
-                <h2 class="text-slate-400 text-xs uppercase tracking-widest font-bold mb-1">Memória</h2>
-                <p id="mem" class="text-lg font-bold text-slate-300">-- MB</p>
-            </div>
-        </div>
-
-        <div class="grid grid-cols-2 gap-4">
-            <div class="card">
-                <h2 class="text-slate-400 text-xs uppercase tracking-widest font-bold mb-1">Temp</h2>
-                <p id="temp" class="text-xl font-bold text-orange-400">--°C</p>
-            </div>
-            <div class="card">
-                <h2 class="text-slate-400 text-xs uppercase tracking-widest font-bold mb-1">Uptime</h2>
-                <p id="uptime" class="text-xs font-mono">--</p>
-            </div>
-        </div>
-    </div>
-
-    <!-- Chart.js -->
-    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-
     <script>
         const API_URL = 'http://' + window.location.hostname + ':5000';
-        let interfaceData = [];
-        let nextBackupTs = null;
+        let currentRouterId = null;
+        let dashboardInterval = null;
+        let cpuChart, trafficChart;
 
-        // --- Setup Logic (Existing) ---
-        async function checkVerify() {
+        // --- AUTH LOGIC ---
+        async function checkAuth() {
             try {
-                const res = await fetch(API_URL + '/settings/verify');
+                const res = await fetch(API_URL + '/auth/status');
                 const data = await res.json();
-                if (data.configured) {
-                    document.getElementById('mainDashboard').classList.remove('hidden');
-                    startDashboard();
+                if (data.authenticated) {
+                    showScreen('routerListScreen');
+                    loadRouterList();
                 } else {
-                    document.getElementById('setupWizard').classList.remove('hidden');
-                    document.getElementById('headerTitle').classList.add('hidden');
+                    showScreen('loginScreen');
                 }
-            } catch (e) { document.getElementById('setupWizard').classList.remove('hidden'); }
+            } catch (e) { showScreen('loginScreen'); }
         }
 
-        async function checkConnection() {
-            const btn = event.target;
-            const originalText = btn.innerText;
-            btn.innerText = "A CONECTAR...";
+        async function doLogin() {
+            const u = document.getElementById('loginUser').value;
+            const p = document.getElementById('loginPass').value;
+            const res = await fetch(API_URL + '/login', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ username: u, password: p }) });
+            const data = await res.json();
+            if (data.success) {
+                document.getElementById('loginError').classList.add('hidden');
+                checkAuth();
+            } else {
+                document.getElementById('loginError').innerText = data.error;
+                document.getElementById('loginError').classList.remove('hidden');
+            }
+        }
+
+        async function toggleRegister() {
+            const u = prompt("Escolha um utilizador:");
+            if (!u) return;
+            const p = prompt("Escolha uma password:");
+            if (!p) return;
+
+            const res = await fetch(API_URL + '/register', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ username: u, password: p }) });
+            const data = await res.json();
+            if (data.success) { alert("Conta criada! Pode entrar."); }
+            else { alert("Erro: " + data.error); }
+        }
+
+        async function logout() {
+            await fetch(API_URL + '/logout', { method: 'POST' });
+            location.reload();
+        }
+
+        // --- ROUTER LIST LOGIC ---
+        async function loadRouterList() {
+            const res = await fetch(API_URL + '/routers');
+            const list = await res.json();
+            const grid = document.getElementById('routersGrid');
+            grid.innerHTML = '';
+
+            list.forEach(r => {
+                const div = document.createElement('div');
+                div.className = "card flex justify-between items-center hover:bg-slate-800 cursor-pointer transition border-l-4 border-l-blue-500";
+                div.onclick = () => selectRouter(r.id, r.name);
+                div.innerHTML = `
+                    <div>
+                        <h3 class="text-lg font-bold text-white">${r.name}</h3>
+                        <p class="text-xs text-slate-500 font-mono">${r.host}</p>
+                    </div>
+                    <svg class="w-6 h-6 text-slate-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"></path></svg>
+                `;
+                grid.appendChild(div);
+            });
+        }
+
+        function selectRouter(id, name) {
+            currentRouterId = id;
+            document.getElementById('routerNameDisplay').innerText = name.toUpperCase();
+            showScreen('dashboardScreen');
+            startDashboard();
+        }
+
+        function exitToRouterList() {
+            currentRouterId = null;
+            clearInterval(dashboardInterval);
+            showScreen('routerListScreen');
+            loadRouterList();
+        }
+
+        // --- ADD ROUTER LOGIC ---
+        function showAddRouterModal() { document.getElementById('addRouterModal').classList.remove('hidden'); }
+        function closeAddRouterModal() { document.getElementById('addRouterModal').classList.add('hidden'); document.getElementById('step1').classList.remove('hidden'); document.getElementById('step2').classList.add('hidden'); }
+
+        async function checkRouterConnection() {
             const payload = {
                 ip: document.getElementById('rbIp').value,
                 user: document.getElementById('rbUser').value,
@@ -259,184 +376,115 @@
                     list.innerHTML = "";
                     interfaceData.forEach(iface => {
                         const div = document.createElement('div');
-                        div.className = "flex items-center space-x-2 p-2 bg-slate-900 rounded cursor-pointer hover:bg-slate-700";
+                        div.className = "flex items-center space-x-2 p-2 bg-slate-900 rounded cursor-pointer hover:bg-slate-700 iface-item";
                         div.onclick = () => {
                             document.querySelectorAll('.iface-item').forEach(el => el.classList.remove('border-blue-500', 'border'));
-                            div.classList.add('border', 'border-blue-500', 'iface-item');
+                            div.classList.add('border', 'border-blue-500');
                             div.dataset.selected = "true";
                         };
                         div.innerHTML = `<div class="w-4 h-4 rounded-full bg-slate-600"></div><span class="text-white font-bold">${iface.name}</span>`;
                         div.dataset.name = iface.name;
-                        div.classList.add('iface-item');
                         list.appendChild(div);
                     });
                 } else { throw new Error(data.error); }
-            } catch (e) {
-                document.getElementById('connError').innerText = "Erro: " + e.message;
-                document.getElementById('connError').classList.remove('hidden');
-            }
-            btn.innerText = originalText;
+            } catch (e) { document.getElementById('connError').innerText = "Erro: " + e.message; document.getElementById('connError').classList.remove('hidden'); }
         }
 
-        async function saveConfig() {
+        async function confirmAddRouter() {
             const selectedIface = document.querySelector('.iface-item[data-selected="true"]');
             if (!selectedIface) { alert("Selecione uma interface WAN!"); return; }
+
             const payload = {
                 ip: document.getElementById('rbIp').value,
                 user: document.getElementById('rbUser').value,
                 name: document.getElementById('rbName').value,
                 password: document.getElementById('rbPass').value,
-                interfaces: [{
-                    name: selectedIface.dataset.name,
-                    speed: document.getElementById('wanSpeed').value,
-                    is_wan: true,
-                    monitor_pppoe: true
-                }]
+                interfaces: [{ name: selectedIface.dataset.name, speed: document.getElementById('wanSpeed').value, is_wan: true, monitor_pppoe: true }]
             };
-            const res = await fetch(API_URL + '/setup/save', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+
+            const res = await fetch(API_URL + '/routers/add', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
             const data = await res.json();
-            if (data.success) location.reload();
+            if (data.success) { closeAddRouterModal(); loadRouterList(); }
         }
 
-        // --- Backup Logic ---
-        function openBackupModal() {
-            document.getElementById('backupModal').classList.remove('hidden');
-            fetchBackups();
+        // --- DASHBOARD LOGIC ---
+        function startDashboard() {
+            if (!cpuChart) initCharts();
+            fetchStats();
+            dashboardInterval = setInterval(fetchStats, 2000);
         }
 
+        async function fetchStats() {
+            if (!currentRouterId) return;
+            try {
+                const res = await fetch(API_URL + '/stats?router_id=' + currentRouterId);
+                const data = await res.json();
+
+                document.getElementById('cpu').innerText = data.cpu + '%';
+                document.getElementById('pppoe').innerText = data.pppoe_active;
+                document.getElementById('mem').innerText = (data.memory / 1024 / 1024).toFixed(0) + ' MB';
+                document.getElementById('uptime').innerText = data.uptime;
+
+                document.getElementById('rx_val').innerText = (data.rx_bps / 1000000).toFixed(1) + ' Mb';
+                document.getElementById('tx_val').innerText = (data.tx_bps / 1000000).toFixed(1) + ' Mb';
+
+                document.getElementById('backupDate').innerText = data.last_backup;
+                // Update Charts
+                if (cpuChart) {
+                    cpuChart.data.datasets[0].data.shift(); cpuChart.data.datasets[0].data.push(data.cpu); cpuChart.update();
+                    trafficChart.data.datasets[0].data.shift(); trafficChart.data.datasets[0].data.push(data.rx_bps / 1000000);
+                    trafficChart.data.datasets[1].data.shift(); trafficChart.data.datasets[1].data.push(data.tx_bps / 1000000); trafficChart.update();
+                }
+            } catch (e) { console.log(e); }
+        }
+
+        function initCharts() {
+            const p = { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { x: { display: false }, y: { display: false } }, elements: { point: { radius: 0 }, line: { tension: 0.4 } } };
+            cpuChart = new Chart(document.getElementById('cpuChart'), { type: 'line', data: { labels: Array(30).fill(''), datasets: [{ data: Array(30).fill(0), borderColor: '#60a5fa', backgroundColor: 'rgba(96, 165, 250, 0.1)', fill: true, borderWidth: 2 }] }, options: { ...p, scales: { y: { min: 0, max: 100, display: false } } } });
+            trafficChart = new Chart(document.getElementById('trafficChart'), { type: 'line', data: { labels: Array(30).fill(''), datasets: [{ data: Array(30).fill(0), borderColor: '#34d399', borderWidth: 2 }, { data: Array(30).fill(0), borderColor: '#60a5fa', borderWidth: 2 }] }, options: p });
+        }
+
+        // --- BACKUP MODAL (Scoped to Router) ---
+        function openBackupModal() { document.getElementById('backupModal').classList.remove('hidden'); fetchBackups(); }
         function closeBackupModal() { document.getElementById('backupModal').classList.add('hidden'); }
 
         async function fetchBackups() {
             const listEl = document.getElementById('backupList');
-            if (!listEl.innerHTML.includes('div')) listEl.innerHTML = '<p class="text-center text-slate-500 py-4">Carregando...</p>';
-            try {
-                const res = await fetch(API_URL + '/backups/list');
-                const backups = await res.json();
-                if (backups.length === 0) { listEl.innerHTML = '<p class="text-center text-slate-500 py-4">Nenhum backup encontrado.</p>'; return; }
-                listEl.innerHTML = '';
-                backups.forEach(backup => {
-                    const isManual = backup.type === 'MANUAL';
-                    const badgeClass = isManual ? 'bg-blue-600/20 text-blue-400 border-blue-600/50' : 'bg-emerald-600/20 text-emerald-400 border-emerald-600/50';
-                    const badgeText = isManual ? 'MANUAL' : 'AUTO';
-
-                    const item = document.createElement('div');
-                    item.className = "flex justify-between items-center bg-slate-900 p-3 rounded-xl border border-slate-700 hover:border-slate-600 transition";
-                    item.innerHTML = `
+            listEl.innerHTML = '<p class="text-center text-slate-500 py-4">Carregando...</p>';
+            const res = await fetch(API_URL + '/backups/list?router_id=' + currentRouterId);
+            const backups = await res.json();
+            listEl.innerHTML = '';
+            backups.forEach(b => {
+                const isMan = b.type === 'MANUAL';
+                const cls = isMan ? 'bg-blue-900/30 text-blue-400 border-blue-500/30' : 'bg-green-900/30 text-green-400 border-green-500/30';
+                listEl.innerHTML += `
+                    <div class="flex justify-between items-center bg-slate-900 p-3 rounded-xl border border-slate-700">
                         <div>
-                            <div class="flex items-center space-x-2 mb-1">
-                                <span class="text-xs font-bold px-1.5 py-0.5 rounded border ${badgeClass}">${badgeText}</span>
-                                <p class="text-white font-bold text-sm">${backup.date}</p>
-                            </div>
-                            <p class="text-xs text-slate-500">${backup.size} • ${backup.filename}</p>
+                             <div class="flex space-x-2 mb-1"><span class="text-xs font-bold px-1 rounded border ${cls}">${b.type}</span><span class="text-white font-bold text-sm">${b.date}</span></div>
+                             <p class="text-xs text-slate-500">${b.size} • ${b.filename}</p>
                         </div>
-                        <button onclick="shareBackup('${backup.filename}')" class="bg-slate-800 text-slate-400 p-2 rounded-lg hover:bg-green-600 hover:text-white transition">
-                            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z" /></svg>
-                        </button>`;
-                    listEl.appendChild(item);
-                });
-            } catch (e) { listEl.innerHTML = '<p class="text-center text-red-400 py-4">Erro ao carregar lista.</p>'; }
+                        <a href="${API_URL}/backups/download/${currentRouterId}/${b.filename}" class="bg-slate-800 text-slate-400 p-2 rounded hover:text-white"><svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" /></svg></a>
+                    </div>`;
+            });
         }
 
         async function triggerManualBackup() {
             const btn = document.getElementById('btnManualBackup');
-            const status = document.getElementById('manualStatus');
-            const originalText = btn.innerText;
-
-            btn.disabled = true;
-            btn.innerHTML = `<svg class="animate-spin -ml-1 mr-3 h-5 w-5 text-white inline" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg> GERANDO BACKUP...`;
-            status.innerText = "Conectando ao MikroTik...";
-            status.classList.remove('hidden');
-
-            try {
-                const res = await fetch(API_URL + '/backups/run', { method: 'POST' });
-                const data = await res.json();
-
-                if (data.success) {
-                    status.innerText = "Backup concluído! Baixando...";
-                    setTimeout(() => {
-                        status.classList.add('hidden');
-                        btn.disabled = false;
-                        btn.innerText = originalText;
-                        fetchBackups(); // Refresh list
-                    }, 1000);
-                } else { throw new Error(data.error); }
-            } catch (e) {
-                status.innerText = "Erro: " + e.message;
-                status.classList.add('text-red-400');
-                btn.disabled = false;
-                btn.innerText = originalText;
-            }
+            const original = btn.innerText;
+            btn.innerText = "CRIANDO..."; btn.disabled = true;
+            await fetch(API_URL + '/backups/run', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ router_id: currentRouterId }) });
+            btn.innerText = original; btn.disabled = false;
+            fetchBackups();
         }
 
-        async function shareBackup(filename) {
-            const url = API_URL + '/backups/download/' + filename;
-            const text = `Backup MikroTik (${filename})`;
-            if (navigator.share) { try { await navigator.share({ title: 'Backup MikroTik', text: text, url: url }); } catch (e) { } }
-            else { window.open(`https://wa.me/?text=${encodeURIComponent(text + '\n' + url)}`, '_blank'); }
+        // --- UTILS ---
+        function showScreen(id) {
+            ['loginScreen', 'routerListScreen', 'dashboardScreen'].forEach(s => document.getElementById(s).classList.add('hidden'));
+            document.getElementById(id).classList.remove('hidden');
         }
 
-        // --- Timer Logic (Existing) ---
-        function updateTimer() {
-            if (!nextBackupTs) return;
-            const now = new Date().getTime();
-            const target = new Date(nextBackupTs).getTime();
-            const distance = target - now;
-
-            if (distance < 0) {
-                document.getElementById('nextBackupTimer').innerText = "Aguardando...";
-            } else {
-                const minutes = Math.floor((distance % (1000 * 60 * 60)) / (1000 * 60));
-                const seconds = Math.floor((distance % (1000 * 60)) / 1000);
-                document.getElementById('nextBackupTimer').innerText = `Próximo em: ${minutes}m ${seconds}s`;
-            }
-        }
-        setInterval(updateTimer, 1000);
-
-        // --- Dashboard Logic (Charts) ---
-        let cpuChart, trafficChart;
-        const commonOptions = { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { x: { display: false }, y: { display: false } }, elements: { point: { radius: 0 }, line: { tension: 0.4 } } };
-
-        function initCharts() {
-            const cpuCtx = document.getElementById('cpuChart').getContext('2d');
-            cpuChart = new Chart(cpuCtx, { type: 'line', data: { labels: Array(30).fill(''), datasets: [{ label: 'CPU', data: Array(30).fill(0), borderColor: '#60a5fa', backgroundColor: 'rgba(96, 165, 250, 0.1)', fill: true, borderWidth: 2 }] }, options: { ...commonOptions, scales: { y: { min: 0, max: 100, display: false } } } });
-            const trafficCtx = document.getElementById('trafficChart').getContext('2d');
-            trafficChart = new Chart(trafficCtx, { type: 'line', data: { labels: Array(30).fill(''), datasets: [{ label: 'Download', data: Array(30).fill(0), borderColor: '#34d399', borderWidth: 2 }, { label: 'Upload', data: Array(30).fill(0), borderColor: '#60a5fa', borderWidth: 2 }] }, options: commonOptions });
-        }
-
-        async function fetchData() {
-            try {
-                const response = await fetch(API_URL + '/stats');
-                if (response.status === 503) return;
-
-                const data = await response.json();
-
-                document.getElementById('headerTitle').innerHTML = `${data.router_name} <span class="text-white text-sm font-light">PROVEDOR</span>`;
-                document.getElementById('cpu').innerText = data.cpu + '%';
-                document.getElementById('pppoe').innerText = data.pppoe_active;
-                document.getElementById('mem').innerText = (data.memory / 1024 / 1024).toFixed(0) + ' MB';
-                document.getElementById('temp').innerText = data.temp !== 'N/A' ? data.temp + '°C' : '--';
-                document.getElementById('uptime').innerText = data.uptime;
-
-                // Backup Status
-                document.getElementById('backupDate').innerText = data.last_backup;
-                if (data.next_backup) nextBackupTs = data.next_backup;
-
-                const rxMbps = (data.rx_bps / 1000000);
-                const txMbps = (data.tx_bps / 1000000);
-                document.getElementById('rx_val').innerText = rxMbps.toFixed(1) + ' Mb';
-                document.getElementById('tx_val').innerText = txMbps.toFixed(1) + ' Mb';
-
-                if (cpuChart) {
-                    cpuChart.data.datasets[0].data.shift(); cpuChart.data.datasets[0].data.push(data.cpu); cpuChart.update();
-                    trafficChart.data.datasets[0].data.shift(); trafficChart.data.datasets[0].data.push(rxMbps);
-                    trafficChart.data.datasets[1].data.shift(); trafficChart.data.datasets[1].data.push(txMbps); trafficChart.update();
-                }
-
-            } catch (e) { console.log("Erro na API:", e); }
-        }
-
-        function startDashboard() { initCharts(); fetchData(); setInterval(fetchData, 2000); }
-        checkVerify();
+        // Start
+        checkAuth();
     </script>
 </body>
 

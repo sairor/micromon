@@ -1,5 +1,7 @@
-from flask import Flask, jsonify, request, send_from_directory
+from flask import Flask, jsonify, request, send_from_directory, redirect, url_for
 from flask_cors import CORS
+from flask_login import LoginManager, UserMixin, login_user, login_required, logout_user, current_user
+from werkzeug.security import generate_password_hash, check_password_hash
 import routeros_api
 import sqlite3
 import os
@@ -8,70 +10,208 @@ from datetime import datetime, timedelta
 from apscheduler.schedulers.background import BackgroundScheduler
 
 app = Flask(__name__, static_folder='frontend', static_url_path='/')
+app.secret_key = 'supersecretkey_change_in_production' 
 CORS(app, resources={r"/*": {"origins": "*"}})
 
-@app.route('/')
-def serve_index():
-    return send_from_directory('frontend', 'index.html')
+login_manager = LoginManager()
+login_manager.init_app(app)
+login_manager.login_view = 'login'
 
 DB_FILE = 'mikromon.db'
-BACKUP_DIR = '/home/sairo/Antigravity/backups'
+BACKUP_BASE_DIR = '/home/sairo/Antigravity/backups'
 
-if not os.path.exists(BACKUP_DIR):
-    os.makedirs(BACKUP_DIR)
+if not os.path.exists(BACKUP_BASE_DIR):
+    os.makedirs(BACKUP_BASE_DIR)
 
-def init_db():
-    conn = sqlite3.connect(DB_FILE)
-    c = conn.cursor()
-    c.execute('''CREATE TABLE IF NOT EXISTS settings
-                 (key TEXT PRIMARY KEY, value TEXT)''')
-    c.execute('''CREATE TABLE IF NOT EXISTS interfaces
-                 (name TEXT PRIMARY KEY, link_speed INTEGER, is_wan BOOLEAN, monitor_pppoe BOOLEAN)''')
-    conn.commit()
-    conn.close()
-
-init_db()
+# --- User Model ---
+class User(UserMixin):
+    def __init__(self, id, username):
+        self.id = id
+        self.username = username
 
 def get_db_connection():
     conn = sqlite3.connect(DB_FILE)
     conn.row_factory = sqlite3.Row
     return conn
 
-def get_creds():
+@login_manager.loader
+def load_user(user_id):
     conn = get_db_connection()
-    settings = dict(conn.execute('SELECT * FROM settings').fetchall())
+    user = conn.execute('SELECT * FROM users WHERE id = ?', (user_id,)).fetchone()
     conn.close()
-    if 'router_ip' not in settings:
-        return None
-    return settings
+    if user:
+        return User(user['id'], user['username'])
+    return None
 
-def connect_to_router(ip, user, password):
-    connection = routeros_api.RouterOsApiPool(ip, username=user, password=password, plaintext_login=True)
+def init_db():
+    conn = sqlite3.connect(DB_FILE)
+    c = conn.cursor()
+    
+    # Users
+    c.execute('''CREATE TABLE IF NOT EXISTS users
+                 (id INTEGER PRIMARY KEY AUTOINCREMENT,
+                  username TEXT UNIQUE NOT NULL,
+                  password_hash TEXT NOT NULL)''')
+
+    # Routers
+    c.execute('''CREATE TABLE IF NOT EXISTS routers
+                 (id INTEGER PRIMARY KEY AUTOINCREMENT,
+                  user_id INTEGER,
+                  name TEXT,
+                  host TEXT,
+                  username TEXT,
+                  password TEXT,
+                  FOREIGN KEY(user_id) REFERENCES users(id))''')
+
+    try:
+        c.execute("ALTER TABLE interfaces ADD COLUMN router_id INTEGER DEFAULT 1")
+    except: pass
+
+    # Interfaces
+    c.execute('''CREATE TABLE IF NOT EXISTS interfaces
+                 (name TEXT, link_speed INTEGER, is_wan BOOLEAN, monitor_pppoe BOOLEAN, router_id INTEGER,
+                  PRIMARY KEY (name, router_id))''')
+
+    conn.commit()
+    conn.close()
+
+init_db()
+
+# --- Auth Routes ---
+@app.route('/register', methods=['POST'])
+def register():
+    data = request.json
+    if not data or not data.get('username') or not data.get('password'):
+        return jsonify({'error': 'Missing credentials'}), 400
+    
+    hashed = generate_password_hash(data['password'])
+    conn = get_db_connection()
+    try:
+        conn.execute('INSERT INTO users (username, password_hash) VALUES (?, ?)',
+                     (data['username'], hashed))
+        conn.commit()
+        return jsonify({'success': True})
+    except sqlite3.IntegrityError:
+        return jsonify({'error': 'Username taken'}), 409
+    finally:
+        conn.close()
+
+@app.route('/login', methods=['POST'])
+def login():
+    data = request.json
+    conn = get_db_connection()
+    user = conn.execute('SELECT * FROM users WHERE username = ?', (data.get('username'),)).fetchone()
+    conn.close()
+    
+    if user and check_password_hash(user['password_hash'], data.get('password')):
+        user_obj = User(user['id'], user['username'])
+        login_user(user_obj)
+        return jsonify({'success': True, 'username': user['username']})
+    
+    return jsonify({'error': 'Invalid credentials'}), 401
+
+@app.route('/logout', methods=['POST'])
+@login_required
+def logout():
+    logout_user()
+    return jsonify({'success': True})
+
+@app.route('/auth/status')
+def auth_status():
+    if current_user.is_authenticated:
+        return jsonify({'authenticated': True, 'username': current_user.username})
+    return jsonify({'authenticated': False})
+
+# --- Router Management ---
+def get_router_or_404(router_id):
+    conn = get_db_connection()
+    router = conn.execute('SELECT * FROM routers WHERE id = ? AND user_id = ?', 
+                          (router_id, current_user.id)).fetchone()
+    conn.close()
+    return router
+
+@app.route('/routers', methods=['GET'])
+@login_required
+def list_routers():
+    conn = get_db_connection()
+    routers = conn.execute('SELECT id, name, host FROM routers WHERE user_id = ?', (current_user.id,)).fetchall()
+    conn.close()
+    return jsonify([dict(r) for r in routers])
+
+@app.route('/routers/add', methods=['POST'])
+@login_required
+def add_router():
+    data = request.json
+    conn = get_db_connection()
+    
+    # Insert Router
+    cursor = conn.cursor()
+    cursor.execute('INSERT INTO routers (user_id, name, host, username, password) VALUES (?, ?, ?, ?, ?)',
+                 (current_user.id, data['name'], data['ip'], data['user'], data['password']))
+    router_id = cursor.lastrowid
+    
+    # Insert Interface
+    if 'interfaces' in data:
+        for iface in data['interfaces']:
+             cursor.execute("INSERT OR REPLACE INTO interfaces (name, link_speed, is_wan, monitor_pppoe, router_id) VALUES (?, ?, ?, ?, ?)",
+                  (iface['name'], iface['speed'], iface['is_wan'], iface['monitor_pppoe'], router_id))
+
+    conn.commit()
+    conn.close()
+    return jsonify({'success': True})
+
+@app.route('/setup/connect', methods=['POST'])
+@login_required
+def try_connect():
+    data = request.json
+    try:
+        connection = routeros_api.RouterOsApiPool(data['ip'], username=data['user'], password=data['password'], plaintext_login=True)
+        api = connection.get_api()
+        interfaces = api.get_resource('/interface').get()
+        connection.disconnect()
+        
+        iface_list = [{'name': i['name'], 'type': i.get('type', 'ether')} for i in interfaces]
+        return jsonify({"success": True, "interfaces": iface_list})
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)})
+
+def connect_to_router_by_id(router_id, user_id=None): # user_id optional to allow scheduler access
+    conn = get_db_connection()
+    query = 'SELECT * FROM routers WHERE id = ?'
+    args = [router_id]
+    if user_id: 
+        query += ' AND user_id = ?'
+        args.append(user_id)
+        
+    router = conn.execute(query, tuple(args)).fetchone()
+    conn.close()
+    
+    if not router: return None, None
+    connection = routeros_api.RouterOsApiPool(router['host'], username=router['username'], password=router['password'], plaintext_login=True)
     return connection.get_api(), connection
 
-# --- Backup & Pruning Logic ---
+# --- Backup Logic ---
+def get_router_backup_dir(router_id):
+    path = os.path.join(BACKUP_BASE_DIR, str(router_id))
+    if not os.path.exists(path): os.makedirs(path)
+    return path
 
-def prune_backups():
+def prune_backups(router_id):
+    backup_dir = get_router_backup_dir(router_id)
     now = datetime.now()
-    files = sorted([f for f in os.listdir(BACKUP_DIR) if f.endswith('.backup')])
-    
+    try: files = sorted([f for f in os.listdir(backup_dir) if f.endswith('.backup')])
+    except: return
+
     kept_files = set()
     
     def get_time(fname):
         try:
-            # Matches: auto_backup_YYYYMMDD_HHMMSS.backup OR manual_backup_YYYYMMDD_HHMMSS.backup OR backup_YYYYMMDD_HHMMSS.backup
             parts = fname.split('_')
-            # If standard 3 parts: backup_DATE_TIME.backup
-            if len(parts) == 3:
-                ts_str = parts[1] + parts[2].split('.')[0]
-            # If 4 parts: type_backup_DATE_TIME.backup
-            elif len(parts) >= 4:
-                ts_str = parts[2] + parts[3].split('.')[0]
+            if len(parts) == 3: ts_str = parts[1] + parts[2].split('.')[0]
+            elif len(parts) >= 4: ts_str = parts[2] + parts[3].split('.')[0]
             else: return None
-            
             return datetime.strptime(ts_str, "%Y%m%d%H%M%S")
-        except:
-            return None
+        except: return None
 
     auto_files = []
     manual_files = []
@@ -79,13 +219,15 @@ def prune_backups():
     for f in files:
         t = get_time(f)
         if t:
-            if f.startswith('manual_'):
-                manual_files.append({'name': f, 'time': t})
-            else:
-                # Treat 'auto_' and legacy 'backup_' as auto
-                auto_files.append({'name': f, 'time': t})
+            if 'manual_' in f: manual_files.append({'name': f, 'time': t})
+            else: auto_files.append({'name': f, 'time': t})
 
-    # --- PROCESS AUTO BACKUPS (Smart Retention) ---
+    # Manual: 5 Years
+    five_years_ago = now - timedelta(days=365*5)
+    for item in manual_files:
+        if item['time'] > five_years_ago: kept_files.add(item['name'])
+
+    # Auto: Smart Retention
     daily_buckets = {} 
     weekly_buckets = {} 
 
@@ -98,244 +240,177 @@ def prune_backups():
         if 7 <= age_days < 90:
             if day_key not in daily_buckets: daily_buckets[day_key] = []
             daily_buckets[day_key].append(item)
-            continue
-        if 90 <= age_days < 1095:
-             if day_key not in daily_buckets: daily_buckets[day_key] = []
-             daily_buckets[day_key].append(item)
-             continue
-        if age_days >= 1095:
-             week_key = item['time'].strftime("%Y-%W")
-             if week_key not in weekly_buckets: weekly_buckets[week_key] = []
-             weekly_buckets[week_key].append(item)
+        elif age_days >= 90:
+            if age_days < 1095:
+                 if day_key not in daily_buckets: daily_buckets[day_key] = []
+                 daily_buckets[day_key].append(item)
+            else:
+                 week_key = item['time'].strftime("%Y-%W")
+                 if week_key not in weekly_buckets: weekly_buckets[week_key] = []
+                 weekly_buckets[week_key].append(item)
 
-    for day, items in daily_buckets.items():
-        items.sort(key=lambda x: x['time'])
-        age = (now - items[0]['time']).days
-        if age < 90:
-            kept_files.add(items[0]['name']) 
-            if len(items) > 1: kept_files.add(items[-1]['name']) 
-        else:
-            kept_files.add(items[0]['name']) 
+    # Buckets Logic
+    for bucket in [daily_buckets, weekly_buckets]:
+        for key, items in bucket.items():
+            items.sort(key=lambda x: x['time'])
+            if items: kept_files.add(items[0]['name'])
+            if len(items) > 1: kept_files.add(items[-1]['name'])
 
-    for week, items in weekly_buckets.items():
-        items.sort(key=lambda x: x['time'])
-        kept_files.add(items[0]['name'])
-
-    # --- PROCESS MANUAL BACKUPS (Simple 5 Year Retention) ---
-    for item in manual_files:
-        age_days = (now - item['time']).days
-        # Keep for 5 years (approx 1825 days)
-        if age_days <= (365 * 5):
-            kept_files.add(item['name'])
-
-    # DELETE unkept files
     for f in files:
         if f not in kept_files:
-            try:
-                os.remove(os.path.join(BACKUP_DIR, f))
-                print(f"Pruned Backup: {f}")
+            try: os.remove(os.path.join(backup_dir, f))
             except: pass
 
-# Scheduler Initialization
-scheduler = BackgroundScheduler()
-
-def execute_backup_logic(manual=False):
-    creds = get_creds()
-    if not creds: return {"success": False, "error": "Credenciais não encontradas"}
-    
+def run_backup_job_for_router(router_id, router_data):
     try:
-        api, connection = connect_to_router(creds['router_ip'], creds['router_user'], creds['router_pass'])
+        connection = routeros_api.RouterOsApiPool(router_data['host'], username=router_data['username'], password=router_data['password'], plaintext_login=True)
+        api = connection.get_api()
         
-        ts = datetime.now().strftime("%Y%m%d_%H%M%S")
-        prefix = "manual_backup" if manual else "auto_backup"
-        backup_name = f"{prefix}_{ts}" 
-        
-        # Trigger
-        api.get_binary_resource('/').call('system/backup/save', {'name': backup_name.encode()})
-        time.sleep(2) 
-        
-        # Download
-        files = api.get_resource('/file').get()
-        target_file = next((f for f in files if f['name'] == f"{backup_name}.backup" or f['name'] == backup_name), None)
-        
-        if target_file:
-            fname = target_file['name']
-            local_path = os.path.join(BACKUP_DIR, fname)
-            
-            # Using sshpass
-            cmd = f"sshpass -p '{creds['router_pass']}' scp -o StrictHostKeyChecking=no {creds['router_user']}@{creds['router_ip']}:/{fname} {local_path}"
-            ret = os.system(cmd)
-            
-            if ret != 0:
-                connection.disconnect()
-                return {"success": False, "error": "Falha no Download (SCP) - Verifique se o SSH está ativo na porta 22"}
+        filename = f"auto_backup_{datetime.now().strftime('%Y%m%d_%H%M%S')}.backup"
+        api.get_binary_resource('/').call('system/backup/save', {'name': filename})
+        time.sleep(2)
 
-            api.get_resource('/file').remove(id=target_file['id'])
-            prune_backups()
-            connection.disconnect()
-            return {"success": True, "file": fname}
+        local_path = os.path.join(get_router_backup_dir(router_id), filename)
+        ssh_cmd = f"sshpass -p '{router_data['password']}' scp -o StrictHostKeyChecking=no {router_data['username']}@{router_data['host']}:/{filename} {local_path}"
+        
+        if os.system(ssh_cmd) == 0:
+            del_cmd = f"sshpass -p '{router_data['password']}' ssh -o StrictHostKeyChecking=no {router_data['username']}@{router_data['host']} '/file remove {filename}'"
+            os.system(del_cmd)
+            prune_backups(router_id)
         
         connection.disconnect()
-        return {"success": False, "error": "Arquivo não encontrado no Router"}
-        
     except Exception as e:
-        return {"success": False, "error": str(e)}
+        print(f"Backup failed for router {router_id}: {e}")
 
-def run_backup_job():
-    print("Starting Scheduled Backup...")
-    res = execute_backup_logic(manual=False)
-    print(f"Backup Result: {res}")
+def run_global_backup_job():
+    with app.app_context():
+        conn = get_db_connection()
+        routers = conn.execute('SELECT * FROM routers').fetchall()
+        conn.close()
+        for r in routers:
+            run_backup_job_for_router(r['id'], r)
 
-scheduler.add_job(run_backup_job, 'interval', minutes=60, id='backup_job')
+scheduler = BackgroundScheduler()
+scheduler.add_job(run_global_backup_job, 'interval', minutes=60)
 scheduler.start()
 
-# --- Routes ---
-
-@app.route('/backups/run', methods=['POST'])
-def manual_backup():
-    result = execute_backup_logic(manual=True)
-    if result['success']:
-        return jsonify(result)
-    else:
-        return jsonify(result), 500
-
-@app.route('/settings/verify', methods=['GET'])
-def check_config():
-    creds = get_creds()
-    return jsonify({"configured": creds is not None})
-
-@app.route('/setup/connect', methods=['POST'])
-def setup_connect():
-    data = request.json
-    try:
-        api, connection = connect_to_router(data['ip'], data['user'], data['password'])
-        interfaces = api.get_resource('/interface').get()
-        clean_interfaces = []
-        for iface in interfaces:
-            if iface.get('type') in ['ether', 'vlan', 'bridge']:
-                clean_interfaces.append({'name': iface.get('name')})
-        connection.disconnect()
-        return jsonify({"success": True, "interfaces": clean_interfaces})
-    except Exception as e:
-        return jsonify({"success": False, "error": str(e)}), 400
-
-@app.route('/setup/save', methods=['POST'])
-def setup_save():
-    data = request.json
-    conn = get_db_connection()
-    c = conn.cursor()
-    c.execute('INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)', ('router_ip', data['ip']))
-    c.execute('INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)', ('router_user', data['user']))
-    c.execute('INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)', ('router_pass', data['password']))
-    c.execute('INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)', ('router_name', data['name']))
-    c.execute('DELETE FROM interfaces')
-    for iface in data['interfaces']:
-        c.execute('INSERT INTO interfaces (name, link_speed, is_wan, monitor_pppoe) VALUES (?, ?, ?, ?)',
-                  (iface['name'], iface['speed'], iface['is_wan'], iface['monitor_pppoe']))
-    conn.commit()
-    conn.close()
-    
-    if scheduler.get_job('backup_job'): scheduler.remove_job('backup_job')
-    scheduler.add_job(run_backup_job, 'interval', minutes=60, id='backup_job')
-    
-    return jsonify({"success": True})
-
-@app.route('/backups/list')
-def list_backups():
-    files = sorted([f for f in os.listdir(BACKUP_DIR) if f.endswith('.backup')], reverse=True)
-    backups = []
-    for f in files:
-        path = os.path.join(BACKUP_DIR, f)
-        size_mb = os.path.getsize(path) / 1024 / 1024
-        try:
-            parts = f.split('_')
-            if len(parts) >= 4: # type_backup_DATE_TIME
-                ts_str = parts[2] + parts[3].split('.')[0]
-            else: # backup_DATE_TIME (legacy)
-                ts_str = parts[1] + parts[2].split('.')[0]
-            
-            dt = datetime.strptime(ts_str, "%Y%m%d%H%M%S")
-            date_fmt = dt.strftime("%d/%m/%Y %H:%M")
-        except: date_fmt = f
-        
-        btype = 'MANUAL' if f.startswith('manual_') else 'AUTO'
-
-        backups.append({
-            "filename": f,
-            "date": date_fmt,
-            "size": f"{size_mb:.2f} MB",
-            "type": btype
-        })
-    return jsonify(backups)
-
-@app.route('/backups/download/<path:filename>')
-def download_backup(filename):
-    return send_from_directory(BACKUP_DIR, filename, as_attachment=True)
-
+# --- Main API ---
 @app.route('/stats')
+@login_required
 def stats():
-    creds = get_creds()
-    if not creds: return jsonify({"error": "Not Configured"}), 503
+    router_id = request.args.get('router_id')
+    if not router_id: return jsonify({'error': 'Router ID required'}), 400
+    
+    # Ownership Check
+    router = get_router_or_404(router_id)
+    if not router: return jsonify({'error': 'Router not found'}), 404
 
     try:
-        api, connection = connect_to_router(creds['router_ip'], creds['router_user'], creds['router_pass'])
+        api, connection = connect_to_router_by_id(router_id, current_user.id)
         resource = api.get_resource('/system/resource').get()[0]
+        try: pppoe = api.get_resource('/interface/pppoe-server/active-conn').get()
+        except: pppoe = []
         
+        # Traffic
         conn = get_db_connection()
-        configured_ifaces = conn.execute('SELECT * FROM interfaces').fetchall()
+        iface = conn.execute('SELECT * FROM interfaces WHERE router_id = ? AND is_wan = 1', (router_id,)).fetchone()
         conn.close()
-
-        wan_stats = {"rx": 0, "tx": 0}
-        for iface in configured_ifaces:
-            if iface['is_wan']:
-                traffic = api.get_binary_resource('/').call('interface/monitor-traffic', {'interface': iface['name'].encode(), 'once': 'true'.encode()})
-                if traffic:
-                    wan_stats['rx'] += int(traffic[0].get('rx-bits-per-second', 0))
-                    wan_stats['tx'] += int(traffic[0].get('tx-bits-per-second', 0))
         
-        pppoe_count = 0
-        try:
-            active_connections = api.get_resource('/ppp/active').get()
-            pppoe_count = len([c for c in active_connections if c.get('service') == 'pppoe'])
-        except: pppoe_count = 0
-
-        local_backups = sorted([f for f in os.listdir(BACKUP_DIR) if f.endswith('.backup')])
-        last_backup = "Nenhum"
-        if local_backups:
-             try:
-                 # Try to parse the last one
-                 fname = local_backups[-1]
-                 parts = fname.split('_')
-                 if len(parts) >= 4: ts_str = parts[2] + parts[3].split('.')[0]
-                 else: ts_str = parts[1] + parts[2].split('.')[0]
-                 
-                 dt = datetime.strptime(ts_str, "%Y%m%d%H%M%S")
-                 last_backup = dt.strftime("%d/%m/%Y %H:%M")
-             except: last_backup = "Local"
+        rx = 0
+        tx = 0
+        if iface:
+            try:
+                traffic = api.get_binary_resource('/').call('interface/monitor-traffic', {'interface': iface['name'], 'once': 'true'})
+                if traffic:
+                    rx = int(traffic[0].get('rx-bits-per-second', 0))
+                    tx = int(traffic[0].get('tx-bits-per-second', 0))
+            except: pass
 
         connection.disconnect()
-        
-        next_run = None
-        job = scheduler.get_job('backup_job')
-        if job and job.next_run_time:
-            next_run = job.next_run_time.isoformat()
+
+        # Backup Status
+        backup_dir = get_router_backup_dir(router_id)
+        backups = sorted([f for f in os.listdir(backup_dir) if f.endswith('.backup')])
+        last_backup = "Nunca"
+        if backups:
+            ts = os.path.getmtime(os.path.join(backup_dir, backups[-1]))
+            last_backup = datetime.fromtimestamp(ts).strftime('%d/%m/%Y %H:%M')
+
+        # Next run is simply hour mark
+        now = datetime.now()
+        next_run = (now + timedelta(hours=1)).replace(minute=0, second=0, microsecond=0).isoformat()
 
         return jsonify({
-            "router_name": creds['router_name'],
+            "router_name": router['name'],
             "cpu": resource.get('cpu-load'),
             "memory": resource.get('free-memory'),
             "uptime": resource.get('uptime'),
-            "pppoe_active": pppoe_count,
-            "rx_bps": wan_stats['rx'],
-            "tx_bps": wan_stats['tx'],
+            "pppoe_active": len(pppoe),
             "temp": "N/A",
+            "rx_bps": rx,
+            "tx_bps": tx,
             "last_backup": last_backup,
             "next_backup": next_run
         })
     except Exception as e:
-        import traceback
-        traceback.print_exc()
         return jsonify({"error": str(e)}), 500
+
+@app.route('/backups/list')
+@login_required
+def list_backups():
+    router_id = request.args.get('router_id')
+    if not get_router_or_404(router_id): return jsonify([])
+
+    backup_dir = get_router_backup_dir(router_id)
+    files = []
+    try:
+        for f in os.listdir(backup_dir):
+            if f.endswith('.backup'):
+                path = os.path.join(backup_dir, f)
+                size = os.path.getsize(path) / 1024 / 1024
+                mod_time = datetime.fromtimestamp(os.path.getmtime(path)).strftime('%d/%m/%Y %H:%M')
+                b_type = "MANUAL" if "manual_" in f else "AUTO"
+                files.append({"filename": f, "date": mod_time, "size": f"{size:.2f} MB", "type": b_type})
+    except: pass
+    return jsonify(sorted(files, key=lambda x: x['date'], reverse=True))
+
+@app.route('/backups/download/<router_id>/<filename>')
+@login_required
+def download_backup(router_id, filename):
+    if not get_router_or_404(router_id): return "Unauthorized", 403
+    return send_from_directory(get_router_backup_dir(router_id), filename)
+
+@app.route('/backups/run', methods=['POST'])
+@login_required
+def manual_backup():
+    router_id = request.json.get('router_id')
+    router = get_router_or_404(router_id)
+    if not router: return jsonify({'error': 'Router not found'}), 404
+
+    try:
+        api, connection = connect_to_router_by_id(router_id, current_user.id)
+        filename = f"manual_backup_{datetime.now().strftime('%Y%m%d_%H%M%S')}.backup"
+        api.get_binary_resource('/').call('system/backup/save', {'name': filename})
+        time.sleep(2)
+        
+        local_path = os.path.join(get_router_backup_dir(router_id), filename)
+        ssh_cmd = f"sshpass -p '{router['password']}' scp -o StrictHostKeyChecking=no {router['username']}@{router['host']}:/{filename} {local_path}"
+        
+        if os.system(ssh_cmd) == 0:
+             del_cmd = f"sshpass -p '{router['password']}' ssh -o StrictHostKeyChecking=no {router['username']}@{router['host']} '/file remove {filename}'"
+             os.system(del_cmd)
+             prune_backups(router_id)
+             connection.disconnect()
+             return jsonify({'success': True})
+        else:
+             connection.disconnect()
+             return jsonify({'error': 'Download Failed (SSH)'}), 500
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/')
+def serve_index():
+    return send_from_directory('frontend', 'index.html')
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5000)
