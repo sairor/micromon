@@ -7,8 +7,12 @@ import time
 from datetime import datetime, timedelta
 from apscheduler.schedulers.background import BackgroundScheduler
 
-app = Flask(__name__)
+app = Flask(__name__, static_folder='frontend', static_url_path='/')
 CORS(app, resources={r"/*": {"origins": "*"}})
+
+@app.route('/')
+def serve_index():
+    return send_from_directory('frontend', 'index.html')
 
 DB_FILE = 'mikromon.db'
 BACKUP_DIR = '/home/sairo/Antigravity/backups'
