@@ -1,0 +1,16 @@
+# Binaries
+main
+*.exe
+*.dll
+
+# Databases & Secrets
+*.db
+*.sqlite
+vpn.secrets
+config.json
+
+# Logs
+*.log
+
+# OS
+.DS_Store

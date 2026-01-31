@@ -1,0 +1,641 @@
+<!DOCTYPE html>
+<html lang="pt-BR" class="dark">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MICROMON - ISP Command Center</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    colors: {
+                        'brand-black': '#0a0a0a',
+                        'brand-gray': '#1a1a1a',
+                        'neon-green': '#00ff41',
+                        'neon-red': '#ff0033',
+                    },
+                    fontFamily: {
+                        mono: ['Courier New', 'monospace'],
+                    }
+                }
+            }
+        }
+    </script>
+    <style type="text/tailwindcss">
+        @layer utilities {
+            .scrollbar-hide::-webkit-scrollbar {
+                display: none;
+            }
+        }
+        body {
+            @apply bg-brand-black text-gray-200 font-sans antialiased;
+        }
+        .terminal-text {
+            @apply font-mono text-neon-green;
+        }
+    </style>
+</head>
+
+<body class="h-screen w-screen overflow-hidden flex flex-col">
+
+    <!-- Login Screen -->
+    <div id="login-screen" class="absolute inset-0 z-50 bg-brand-black flex items-center justify-center">
+        <div class="w-full max-w-md p-8 bg-brand-gray border border-gray-800 rounded-lg shadow-2xl">
+            <pre class="text-xs text-neon-green mb-6 text-center leading-3 font-bold">
+ __  __ ___ ___ ___  ___  __  __  ___  _   _ 
+|  \/  |_ _/ __| _ \/ _ \|  \/  |/ _ \| \ | |
+| |\/| || | (__|   / (_) | |\/| | (_) |  \| |
+|_|  |_|___\___|_|_\\___/|_|  |_|\___/|_| \_|
+            </pre>
+            <h2 class="text-center text-xl font-bold mb-6 tracking-wide uppercase text-gray-400">Acesso Restrito</h2>
+            <form id="login-form" class="space-y-4">
+                <div>
+                    <label class="block text-xs font-mono text-gray-500 mb-1">USUÁRIO</label>
+                    <input type="text" id="username"
+                        class="w-full bg-black border border-gray-700 p-2 text-white focus:border-neon-green focus:outline-none transition-colors"
+                        placeholder="admin">
+                </div>
+                <div>
+                    <label class="block text-xs font-mono text-gray-500 mb-1">SENHA</label>
+                    <input type="password" id="password"
+                        class="w-full bg-black border border-gray-700 p-2 text-white focus:border-neon-green focus:outline-none transition-colors"
+                        placeholder="•••••••">
+                </div>
+                <button type="submit"
+                    class="w-full bg-neon-green text-black font-bold py-2 mt-4 hover:bg-green-500 transition-transform active:scale-95">ENTRAR</button>
+            </form>
+            <div id="login-error" class="text-neon-red text-center mt-4 text-sm hidden">Acesso Negado</div>
+        </div>
+    </div>
+
+    <!-- Main App (Hidden by default) -->
+    <div id="app-container" class="hidden flex-1 flex h-full">
+
+        <!-- Sidebar -->
+        <aside class="w-64 bg-brand-gray border-r border-gray-800 flex flex-col justify-between">
+            <div>
+                <div class="p-6 border-b border-gray-800">
+                    <h1 class="text-neon-green font-bold text-xl tracking-tighter">MICROMON</h1>
+                    <p class="text-xs text-gray-500">Central ISP v1.0</p>
+                </div>
+                <nav class="p-4 space-y-2 services-nav">
+                    <button
+                        class="w-full text-left p-2 hover:bg-gray-800 rounded text-sm flex items-center gap-2 text-gray-300 hover:text-white"
+                        onclick="showPage('olt')">
+                        <span>📡</span> OLTs
+                    </button>
+                    <button
+                        class="w-full text-left p-2 hover:bg-gray-800 rounded text-sm flex items-center gap-2 text-gray-300 hover:text-white"
+                        onclick="showPage('router')">
+                        <span>🔌</span> Roteadores
+                    </button>
+                    <button
+                        class="w-full text-left p-2 hover:bg-gray-800 rounded text-sm flex items-center gap-2 text-gray-300 hover:text-white"
+                        onclick="showPage('switch')">
+                        <span>🖧</span> Switchs
+                    </button>
+                    <button
+                        class="w-full text-left p-2 hover:bg-gray-800 rounded text-sm flex items-center gap-2 text-gray-300 hover:text-white"
+                        onclick="showPage('automation')">
+                        <span>🤖</span> Automação
+                    </button>
+                    <div class="border-t border-gray-800 my-2"></div>
+                    <button
+                        class="w-full text-left p-2 hover:bg-gray-800 rounded text-sm flex items-center gap-2 text-neon-green hover:text-white"
+                        onclick="showPage('tech')">
+                        <span>🛠️</span> Portal Técnico
+                    </button>
+                    <button
+                        class="w-full text-left p-2 hover:bg-gray-800 rounded text-sm flex items-center gap-2 text-purple-400 hover:text-white"
+                        onclick="showPage('team')">
+                        <span>👥</span> Equipe (Admin)
+                    </button>
+                </nav>
+            </div>
+            <div class="p-4 border-t border-gray-800">
+                <div class="flex items-center gap-3">
+                    <div class="w-8 h-8 rounded-full bg-gray-700 flex items-center justify-center font-bold text-xs"
+                        id="avatar">AD</div>
+                    <div>
+                        <div class="text-sm font-bold" id="user-display">Admin</div>
+                        <div class="text-xs text-neon-green">Conectado</div>
+                    </div>
+                </div>
+                <button onclick="logout()" class="mt-3 text-xs text-red-500 hover:underline w-full text-left">Encerrar
+                    Sessão</button>
+            </div>
+        </aside>
+
+        <!-- Content Area -->
+        <main class="flex-1 overflow-auto bg-black relative p-6">
+
+            <!-- Page: OLT -->
+            <div id="page-olt" class="page-content hidden">
+                <h2 class="text-2xl font-bold mb-6 border-b border-gray-800 pb-2">Interfaces OLT</h2>
+                <div id="olt-container" class="space-y-8">
+                    <!-- Dynamic OLT Sections will be injected here -->
+                </div>
+            </div>
+
+            <!-- Page: Router -->
+            <div id="page-router" class="page-content hidden">
+                <h2 class="text-2xl font-bold mb-6 border-b border-gray-800 pb-2">Telemetria Roteador</h2>
+                <div id="router-container" class="space-y-8">
+                    <!-- Dynamic Content -->
+                </div>
+            </div>
+
+            <!-- Page: Switch -->
+            <div id="page-switch" class="page-content hidden">
+                <h2 class="text-2xl font-bold mb-6 border-b border-gray-800 pb-2">Telemetria Switchs</h2>
+                <div id="switch-container" class="space-y-8">
+                    <!-- Dynamic Content -->
+                </div>
+            </div>
+
+            <!-- Page: Automation -->
+            <div id="page-automation" class="page-content hidden">
+                <h2 class="text-2xl font-bold mb-6 border-b border-gray-800 pb-2">Comandos Personalizados</h2>
+                <div id="commands-grid"></div>
+            </div>
+
+            <!-- Page: Team (Admin) -->
+            <div id="page-team" class="page-content hidden">
+                <div class="flex justify-between items-center mb-6 border-b border-gray-800 pb-2">
+                    <h2 class="text-2xl font-bold">Gestão de Equipe</h2>
+                    <button onclick="promptAddUser()"
+                        class="bg-purple-600 hover:bg-purple-500 text-white px-4 py-2 rounded text-sm font-bold">
+                        + Novo Funcionário
+                    </button>
+                </div>
+                <div class="bg-gray-900 border border-gray-800 rounded overflow-hidden">
+                    <table class="w-full text-left text-sm text-gray-400">
+                        <thead class="bg-black text-xs uppercase font-bold text-gray-500">
+                            <tr>
+                                <th class="p-4">Nome</th>
+                                <th class="p-4">Função</th>
+                                <th class="p-4">Usuário</th>
+                                <th class="p-4">Status</th>
+                            </tr>
+                        </thead>
+                        <tbody id="user-list-body" class="divide-y divide-gray-800">
+                            <!-- Dynamic Rows -->
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- Page: Tech Portal -->
+            <div id="page-tech" class="page-content hidden">
+                <h2 class="text-2xl font-bold mb-6 border-b border-gray-800 pb-2 text-neon-green">Portal Técnico</h2>
+
+                <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                    <!-- Unconfigured ONUs -->
+                    <div class="bg-gray-900 border border-gray-800 p-4 rounded">
+                        <h3 class="text-white font-bold mb-4 flex items-center gap-2">
+                            <span>⚠️</span> ONUs Não Configuradas
+                        </h3>
+                        <div id="unconfigured-list" class="space-y-2">
+                            <!-- Dynamic Items -->
+                        </div>
+                    </div>
+
+                    <!-- PON Signal Check (Quick View) -->
+                    <div class="bg-gray-900 border border-gray-800 p-4 rounded">
+                        <h3 class="text-white font-bold mb-4">Sinal PON (Tempo Real)</h3>
+                        <div class="grid grid-cols-4 gap-2 text-center text-xs">
+                            <div class="bg-black p-2 rounded border border-gray-700">
+                                <div class="text-gray-500">PON 1</div>
+                                <div class="text-neon-green font-bold">-18.2 dBm</div>
+                            </div>
+                            <div class="bg-black p-2 rounded border border-gray-700">
+                                <div class="text-gray-500">PON 2</div>
+                                <div class="text-neon-green font-bold">-21.5 dBm</div>
+                            </div>
+                            <div class="bg-black p-2 rounded border border-gray-700">
+                                <div class="text-gray-500">PON 3</div>
+                                <div class="text-yellow-500 font-bold">-26.1 dBm</div>
+                            </div>
+                            <div class="bg-black p-2 rounded border border-gray-700">
+                                <div class="text-gray-500">PON 4</div>
+                                <div class="text-neon-green font-bold">-19.0 dBm</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+        </main>
+    </div>
+
+    <div id="terminal-modal" class="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-80 hidden">
+        <div
+            class="bg-brand-gray w-full max-w-4xl rounded-lg border border-gray-700 shadow-2xl flex flex-col h-[600px]">
+            <div class="flex justify-between items-center p-2 border-b border-gray-700 bg-gray-900">
+                <span class="text-xs font-mono text-gray-400 pl-2">root@mikromon:~# <span id="term-title"></span></span>
+                <button onclick="closeTerminal()" class="text-gray-500 hover:text-white px-2">✕</button>
+            </div>
+            <div id="term-output"
+                class="flex-1 bg-black p-4 font-mono text-sm overflow-auto text-green-500 whitespace-pre-wrap"></div>
+        </div>
+    </div>
+
+    <script>
+        const API_BASE = '/api/v1';
+
+        // Simple View Logic
+        function showPage(pageId) {
+            document.querySelectorAll('.page-content').forEach(el => el.classList.add('hidden'));
+            document.getElementById('page-' + pageId).classList.remove('hidden');
+            if (pageId === 'olt' || pageId === 'router' || pageId === 'switch') loadDevices(pageId);
+            if (pageId === 'automation') loadCommands();
+            if (pageId === 'team') loadUsers();
+            if (pageId === 'tech') loadTechDashboard();
+        }
+
+        async function loadUsers() {
+            const token = localStorage.getItem('token');
+            const tbody = document.getElementById('user-list-body');
+            tbody.innerHTML = '<tr><td colspan="4" class="p-4 text-center">Carregando...</td></tr>';
+
+            try {
+                const res = await fetch(`${API_BASE}/users`, { headers: { 'Authorization': 'Bearer ' + token } });
+                const users = await res.json();
+                tbody.innerHTML = '';
+
+                users.forEach(u => {
+                    const row = `
+                        <tr class="hover:bg-gray-800 transition-colors">
+                            <td class="p-4 font-bold text-white">${u.full_name}</td>
+                            <td class="p-4"><span class="bg-gray-700 px-2 py-1 rounded text-xs uppercase text-white">${u.role}</span></td>
+                            <td class="p-4 font-mono">${u.username}</td>
+                            <td class="p-4 text-neon-green">Ativo</td>
+                        </tr>
+                    `;
+                    tbody.innerHTML += row;
+                });
+            } catch (e) { tbody.innerHTML = '<tr><td colspan="4" class="p-4 text-red-500">Erro ao carregar usuários</td></tr>'; }
+        }
+
+        async function promptAddUser() {
+            const name = prompt("Nome Completo:");
+            const username = prompt("Usuário:");
+            const role = prompt("Função (admin/tech):", "tech");
+            if (!name || !username) return;
+
+            const token = localStorage.getItem('token');
+            await fetch(`${API_BASE}/users`, {
+                method: 'POST',
+                headers: { 'Authorization': 'Bearer ' + token, 'Content-Type': 'application/json' },
+                body: JSON.stringify({ full_name: name, username: username, role: role })
+            });
+            loadUsers();
+        }
+
+        async function loadTechDashboard() {
+            const token = localStorage.getItem('token');
+            const container = document.getElementById('unconfigured-list');
+            container.innerHTML = '<div class="text-gray-500">Escaneando...</div>';
+
+            try {
+                const res = await fetch(`${API_BASE}/onus/unregistered`, { headers: { 'Authorization': 'Bearer ' + token } });
+                const onus = await res.json();
+                container.innerHTML = '';
+
+                if (onus.length === 0) {
+                    container.innerHTML = '<div class="text-green-500">Nenhuma ONU Pendente</div>';
+                    return;
+                }
+
+                onus.forEach(o => {
+                    const div = document.createElement('div');
+                    div.className = "bg-black p-3 rounded border border-gray-700 flex justify-between items-center";
+                    div.innerHTML = `
+                        <div>
+                            <div class="font-mono text-white font-bold">${o.serial_number}</div>
+                            <div class="text-xs text-gray-500">Porta: ${o.pon_port} | Sinal: <span class="${o.signal_dbm < -25 ? 'text-red-500' : 'text-neon-green'}">${o.signal_dbm} dBm</span></div>
+                        </div>
+                        <button class="bg-neon-green text-black hover:bg-green-400 px-3 py-1 rounded text-xs font-bold transition-colors">Instalar</button>
+                     `;
+                    div.querySelector('button').onclick = () => installOnu(o.serial_number);
+                    container.appendChild(div);
+                });
+            } catch (e) { container.innerText = "Erro ao carregar ONUs"; }
+        }
+
+        async function installOnu(serial) {
+            const userRef = prompt(`Vincular ${serial} ao Cliente (ID):`);
+            if (!userRef) return;
+
+            const token = localStorage.getItem('token');
+            await fetch(`${API_BASE}/onus/install`, {
+                method: 'POST',
+                headers: { 'Authorization': 'Bearer ' + token, 'Content-Type': 'application/json' },
+                body: JSON.stringify({ serial_number: serial, user_ref: userRef })
+            });
+            alert('Instalação Iniciada! Script de provisionamento enviado.');
+            loadTechDashboard();
+        }
+
+        async function loadDevices(type) {
+            const token = localStorage.getItem('token');
+            if (!token) return;
+
+            try {
+                // In a real app we would filter by type query param
+                const res = await fetch(`${API_BASE}/devices`, {
+                    headers: { 'Authorization': 'Bearer ' + token }
+                });
+                const devices = await res.json();
+
+                // For prototype, we just render mock logic mixed with real data
+                // This would be replaced by specific OLT/Router rendering logic
+                if (type === 'olt') renderOLT(devices);
+                if (type === 'router') renderRouter(devices);
+                if (type === 'switch') renderSwitch(devices);
+            } catch (e) { console.error(e); }
+        }
+
+        function renderSwitch(devices) {
+            const container = document.getElementById('switch-container');
+            container.innerHTML = '';
+
+            const switches = devices.filter(d => d.type === 'SWITCH');
+            if (switches.length === 0) {
+                container.innerHTML = '<p class="text-gray-500">Nenhum Switch encontrado.</p>';
+                return;
+            }
+
+            switches.forEach(dev => {
+                const section = document.createElement('div');
+                section.innerHTML = `
+                    <div class="relative flex py-5 items-center">
+                        <div class="flex-grow border-t border-gray-800"></div>
+                        <span class="flex-shrink-0 mx-4 text-purple-400 font-mono text-xl font-bold uppercase tracking-wider bg-black px-4 border border-gray-800 rounded">
+                            🖧 ${dev.name}
+                        </span>
+                        <div class="flex-grow border-t border-gray-800"></div>
+                    </div>
+                    <div class="text-center text-xs text-gray-600 font-mono mb-4">${dev.ip}</div>
+                    
+                    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                        <div class="bg-gray-900 p-4 rounded border border-gray-800 hover:border-purple-500 transition-colors">
+                            <h3 class="text-gray-500 text-xs uppercase mb-1">CPU Load</h3>
+                            <div class="text-2xl font-bold text-white">${Math.floor(Math.random() * 20)}%</div>
+                        </div>
+                        <div class="bg-gray-900 p-4 rounded border border-gray-800 hover:border-purple-500 transition-colors">
+                            <h3 class="text-gray-500 text-xs uppercase mb-1">Ports Active</h3>
+                            <div class="text-2xl font-bold text-purple-400">${12 + Math.floor(Math.random() * 12)}/24</div>
+                        </div>
+                        <div class="bg-gray-900 p-4 rounded border border-gray-800 hover:border-purple-500 transition-colors">
+                             <h3 class="text-gray-500 text-xs uppercase mb-1">Temp</h3>
+                             <div class="text-2xl font-bold text-white">${35 + Math.floor(Math.random() * 10)}°C</div>
+                        </div>
+                         <div class="bg-gray-900 p-4 rounded border border-gray-800 hover:border-purple-500 transition-colors cursor-pointer" onclick="openTerminal({ip: '${dev.ip}', name: '${dev.name}'}, '/interface ethernet print')">
+                            <h3 class="text-gray-500 text-xs uppercase mb-1">Action</h3>
+                            <div class="text-sm font-mono text-purple-400 mt-2">> Terminal</div>
+                        </div>
+                    </div>
+                `;
+                container.appendChild(section);
+            });
+        }
+
+        function renderRouter(devices) {
+            const container = document.getElementById('router-container');
+            container.innerHTML = '';
+
+            const routers = devices.filter(d => d.type === 'ROUTER');
+            if (routers.length === 0) {
+                container.innerHTML = '<p class="text-gray-500">Nenhum Roteador encontrado.</p>';
+                return;
+            }
+
+            routers.forEach(dev => {
+                // Modern Separator (Neon Style)
+                const section = document.createElement('div');
+                section.innerHTML = `
+                    <div class="relative flex py-5 items-center">
+                        <div class="flex-grow border-t border-gray-800"></div>
+                        <span class="flex-shrink-0 mx-4 text-neon-green font-mono text-xl font-bold uppercase tracking-wider bg-black px-4 border border-gray-800 rounded">
+                            🔌 ${dev.name}
+                        </span>
+                        <div class="flex-grow border-t border-gray-800"></div>
+                    </div>
+                    <div class="text-center text-xs text-gray-600 font-mono mb-4">${dev.ip}</div>
+                    
+                    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                        <!-- Stats Cards -->
+                        <div class="bg-gray-900 p-4 rounded border border-gray-800 hover:border-gray-600 transition-colors">
+                            <h3 class="text-gray-500 text-xs uppercase mb-1">CPU Load</h3>
+                            <div class="text-2xl font-bold text-white">${Math.floor(Math.random() * 40)}%</div>
+                            <div class="w-full bg-gray-800 h-1 mt-2 rounded">
+                                <div class="bg-blue-500 h-1 rounded" style="width: ${Math.random() * 40}%"></div>
+                            </div>
+                        </div>
+                        <div class="bg-gray-900 p-4 rounded border border-gray-800 hover:border-gray-600 transition-colors">
+                            <h3 class="text-gray-500 text-xs uppercase mb-1">PPPoE Active</h3>
+                            <div class="text-2xl font-bold text-neon-green">${1000 + Math.floor(Math.random() * 500)}</div>
+                        </div>
+                        <div class="bg-gray-900 p-4 rounded border border-gray-800 hover:border-gray-600 transition-colors">
+                            <h3 class="text-gray-500 text-xs uppercase mb-1">Uptime</h3>
+                            <div class="text-2xl font-bold text-white">${Math.floor(Math.random() * 30)}d 4h</div>
+                        </div>
+                         <div class="bg-gray-900 p-4 rounded border border-gray-800 hover:border-gray-600 transition-colors cursor-pointer" onclick="openTerminal({ip: '${dev.ip}', name: '${dev.name}'}, '/system resource print')">
+                            <h3 class="text-gray-500 text-xs uppercase mb-1">Action</h3>
+                            <div class="text-sm font-mono text-neon-green mt-2">> Terminal</div>
+                        </div>
+                    </div>
+                `;
+                container.appendChild(section);
+            });
+        }
+
+        async function loadCommands() {
+            const token = localStorage.getItem('token');
+            if (!token) return;
+
+            try {
+                const res = await fetch(`${API_BASE}/commands`, {
+                    headers: { 'Authorization': 'Bearer ' + token }
+                });
+                const commands = await res.json();
+
+                // Render List
+                const container = document.getElementById('page-automation');
+                // Clear previous content but keep header
+                const header = container.querySelector('h2');
+                container.innerHTML = '';
+                container.appendChild(header);
+
+                const grid = document.createElement('div');
+                grid.className = "grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4";
+
+                if (commands && commands.length > 0) {
+                    commands.forEach(cmd => {
+                        const card = document.createElement('div');
+                        card.className = "bg-gray-900 border border-gray-800 p-4 rounded hover:border-blue-500 transition-colors cursor-pointer group";
+                        card.innerHTML = `
+                            <div class="flex justify-between items-start">
+                                <h3 class="font-bold text-white group-hover:text-blue-400">${cmd.title}</h3>
+                                <span class="bg-gray-800 text-xs px-2 py-1 rounded text-gray-400">${cmd.category}</span>
+                            </div>
+                            <code class="block mt-2 text-xs text-gray-500 font-mono bg-black p-2 rounded truncate">${cmd.command}</code>
+                            <p class="text-xs text-gray-600 mt-2">${cmd.description}</p>
+                        `;
+                        // For prototype, clicking just logs or could open a generic terminal
+                        card.onclick = () => alert(`Command selected: ${cmd.title}`);
+                        grid.appendChild(card);
+                    });
+                } else {
+                    grid.innerHTML = '<p class="text-gray-500">Sem comandos personalizados.</p>';
+                }
+                container.appendChild(grid);
+
+            } catch (e) { console.error(e); }
+        }
+
+        async function loadCriticalSignals() {
+            const token = localStorage.getItem('token');
+            if (!token) return;
+            try {
+                const res = await fetch(`${API_BASE}/maintenance/critical-signals`, {
+                    headers: { 'Authorization': 'Bearer ' + token }
+                });
+                const signals = await res.json();
+
+                // Render widget if it exists (assuming we add a widget area later)
+                // For now, let's log it or assume there's a container in the OLT view
+                console.log("Critical Signals:", signals);
+            } catch (e) { console.error(e); }
+        }
+
+        function renderOLT(devices) {
+            const container = document.getElementById('olt-container');
+            container.innerHTML = ''; // Clear previous
+
+            const olts = devices.filter(d => d.type === 'OLT');
+
+            if (olts.length === 0) {
+                container.innerHTML = '<p class="text-gray-500">Nenhuma OLT encontrada.</p>';
+                return;
+            }
+
+            olts.forEach(dev => {
+                // Separator + Header
+                const section = document.createElement('div');
+                section.innerHTML = `
+                   <div class="flex items-center gap-4 mb-6 mt-2">
+                       <div class="h-px bg-gray-800 flex-1"></div>
+                       <h3 class="text-lg font-bold text-gray-400 uppercase tracking-widest flex items-center gap-2">
+                           <span>📡</span> ${dev.name} <span class="text-xs text-gray-600 normal-case font-mono">(${dev.ip})</span>
+                       </h3>
+                       <div class="h-px bg-gray-800 flex-1"></div>
+                   </div>
+                   <div class="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4"></div>
+                `;
+
+                const grid = section.querySelector('.grid');
+
+                // Mock PON Ports for this OLT
+                for (let i = 1; i <= 8; i++) {
+                    const clients = Math.floor(Math.random() * 64);
+                    const percent = (clients / 128) * 100;
+
+                    const card = document.createElement('div');
+                    card.className = "bg-gray-900 border border-gray-800 p-4 rounded text-center hover:border-neon-green transition-colors cursor-pointer group";
+                    card.onclick = () => alert(`Detalhes da PON 0/${i} de ${dev.name}`);
+
+                    card.innerHTML = `
+                        <div class="text-xs text-gray-500 group-hover:text-neon-green transition-colors">PON 0/${i}</div>
+                        <div class="text-white font-bold text-xl my-1">${clients}/128</div>
+                        <div class="h-1 w-full bg-gray-800 mt-2 rounded-full overflow-hidden">
+                            <div class="h-full bg-neon-green shadow-[0_0_10px_rgba(57,255,20,0.5)]" style="width: ${percent}%"></div>
+                        </div>
+                    `;
+                    grid.appendChild(card);
+                }
+
+                container.appendChild(section);
+            });
+        }
+
+        async function openTerminal(device, cmd) {
+            document.getElementById('terminal-modal').classList.remove('hidden');
+            const term = document.getElementById('term-output');
+            const title = document.getElementById('term-title');
+
+            term.innerText = `Connecting to ${device.ip}...\n`;
+            title.innerText = `${device.name}: ${cmd}`;
+
+            // Execute real command
+            const token = localStorage.getItem('token');
+            try {
+                const res = await fetch(`${API_BASE}/devices/command`, {
+                    method: 'POST',
+                    body: JSON.stringify({ device_id: device.id, command: cmd }),
+                    headers: {
+                        'Authorization': 'Bearer ' + token,
+                        'Content-Type': 'application/json'
+                    }
+                });
+                const data = await res.json();
+                if (res.ok) {
+                    term.innerText += `> ${cmd}\n\n${data.output}`;
+                } else {
+                    term.innerText += `Error: ${data.output || 'Command failed'}`;
+                }
+            } catch (e) {
+                term.innerText += `\nConnection Error: ${e}`;
+            }
+        }
+
+        function closeTerminal() {
+            document.getElementById('terminal-modal').classList.add('hidden');
+        }
+
+        const loginForm = document.getElementById('login-form');
+        loginForm.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const u = document.getElementById('username').value;
+            const p = document.getElementById('password').value;
+
+            // Call API
+            try {
+                const res = await fetch('/api/login', {
+                    method: 'POST',
+                    body: JSON.stringify({ username: u, password: p }),
+                    headers: { 'Content-Type': 'application/json' }
+                });
+
+                if (res.ok) {
+                    const data = await res.json();
+                    localStorage.setItem('token', data.token);
+                    document.getElementById('login-screen').classList.add('hidden');
+                    document.getElementById('app-container').classList.remove('hidden');
+                    showPage('olt');
+                } else {
+                    document.getElementById('login-error').classList.remove('hidden');
+                }
+            } catch (err) {
+                console.error(err);
+                // Fallback for demo without backend running
+                if (u === 'admin' && p === 'admin') {
+                    document.getElementById('login-screen').classList.add('hidden');
+                    document.getElementById('app-container').classList.remove('hidden');
+                    showPage('olt');
+                }
+            }
+        });
+
+        function logout() {
+            localStorage.removeItem('token');
+            location.reload();
+        }
+    </script>
+</body>
+
+</html>

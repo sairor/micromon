@@ -1,0 +1,821 @@
+<!DOCTYPE html>
+<html lang="pt">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MikroMon Dashboard</title>
+    <link rel="manifest" href="manifest.json">
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        .card {
+            background: #1e293b;
+            border-radius: 1rem;
+            padding: 1.5rem;
+            border: 1px solid #334155;
+        }
+
+        .stat-value {
+            font-size: 2.25rem;
+            font-weight: 800;
+            line-height: 2.5rem;
+        }
+
+        .hidden {
+            display: none !important;
+        }
+
+        .modal-enter {
+            animation: fadeIn 0.2s ease-out;
+        }
+
+        @keyframes fadeIn {
+            from {
+                opacity: 0;
+                transform: scale(0.95);
+            }
+
+            to {
+                opacity: 1;
+                transform: scale(1);
+            }
+        }
+
+        /* Tooltip */
+        .tooltip {
+            visibility: hidden;
+            position: absolute;
+            z-index: 50;
+            width: 250px;
+            right: 0;
+            background: #334155;
+            padding: 10px;
+            border-radius: 8px;
+            border: 1px solid #475569;
+            font-size: 0.75rem;
+            color: #cbd5e1;
+            box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.5);
+        }
+
+        .has-tooltip:hover .tooltip {
+            visibility: visible;
+        }
+    </style>
+    <script>
+        if ('serviceWorker' in navigator) {
+            window.addEventListener('load', () => { navigator.serviceWorker.register('./sw.js').catch(err => console.log('SW falhou:', err)); });
+        }
+    </script>
+</head>
+
+<body class="bg-slate-950 text-slate-100 font-sans p-4 min-h-screen flex flex-col">
+
+    <!-- LOGIN SCREEN -->
+    <div id="loginScreen" class="flex-1 flex flex-col justify-center items-center hidden">
+        <div class="w-full max-w-sm">
+            <div class="text-center mb-8">
+                <div
+                    class="bg-blue-600 w-16 h-16 rounded-2xl mx-auto flex items-center justify-center mb-4 shadow-lg shadow-blue-500/30">
+                    <svg class="w-8 h-8 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                            d="M9 3v2m6-2v2M9 19v2m6-2v2M5 9H3m2 6H3m18-6h-2m2 6h-2M7 19h10a2 2 0 002-2V7a2 2 0 00-2-2H7a2 2 0 00-2 2v10a2 2 0 002 2zM9 9h6v6H9V9z">
+                        </path>
+                    </svg>
+                </div>
+                <h1 class="text-3xl font-black text-white tracking-tight">MikroMon</h1>
+                <p class="text-slate-400">Entre para gerir os seus equipamentos</p>
+            </div>
+
+            <div class="bg-slate-900 border border-slate-800 p-6 rounded-2xl space-y-4 shadow-xl">
+                <div>
+                    <label class="text-xs font-bold text-slate-500 uppercase">Utilizador</label>
+                    <input type="text" id="loginUser"
+                        class="w-full bg-slate-950 border border-slate-700 p-3 rounded-lg text-white mt-1 focus:border-blue-500 focus:outline-none transition">
+                </div>
+                <div>
+                    <label class="text-xs font-bold text-slate-500 uppercase">Password</label>
+                    <input type="password" id="loginPass"
+                        class="w-full bg-slate-950 border border-slate-700 p-3 rounded-lg text-white mt-1 focus:border-blue-500 focus:outline-none transition">
+                </div>
+                <button onclick="doLogin()"
+                    class="w-full bg-blue-600 hover:bg-blue-500 text-white font-bold py-3 rounded-lg transition shadow-lg shadow-blue-600/20">ENTRAR</button>
+                <div class="text-center pt-2">
+                    <button onclick="toggleRegister()" class="text-slate-500 text-sm hover:text-white transition">Criar
+                        nova conta</button>
+                </div>
+                <p id="loginError" class="text-red-400 text-sm text-center hidden"></p>
+            </div>
+        </div>
+    </div>
+
+    <!-- ROUTER SELECTION SCREEN -->
+    <div id="routerListScreen" class="flex-1 hidden max-w-4xl mx-auto w-full pt-10">
+        <div class="flex justify-between items-center mb-8">
+            <h2 class="text-2xl font-bold text-white">Meus Equipamentos</h2>
+            <button onclick="logout()"
+                class="text-slate-400 hover:text-white text-sm bg-slate-800 px-3 py-1 rounded">Sair</button>
+        </div>
+
+        <div id="routersGrid" class="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <!-- Router Cards Injected Here -->
+        </div>
+
+        <button onclick="showAddRouterModal()"
+            class="mt-4 w-full border-2 border-dashed border-slate-700 text-slate-500 font-bold py-4 rounded-xl hover:border-blue-500 hover:text-blue-500 transition flex items-center justify-center space-x-2">
+            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path>
+            </svg>
+            <span>ADICIONAR NOVO MIKROTIK</span>
+        </button>
+    </div>
+
+    <!-- MAIN DASHBOARD -->
+    <div id="dashboardScreen" class="hidden max-w-md mx-auto w-full">
+        <header class="mb-6 mt-4 flex justify-between items-center">
+            <button onclick="exitToRouterList()" class="bg-slate-800 text-slate-400 p-2 rounded hover:text-white"><svg
+                    class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"></path>
+                </svg></button>
+            <h1 class="text-xl font-black text-blue-500 tracking-tight text-center flex-1">MIKROMON <span
+                    class="text-white text-sm font-light block" id="routerNameDisplay">DASHBOARD</span></h1>
+            <div class="w-9"></div> <!-- Spacer -->
+        </header>
+
+        <div class="grid grid-cols-1 gap-4 pb-10">
+            <!-- Backup Status -->
+            <div onclick="openBackupModal()"
+                class="card border-l-4 border-l-purple-500 flex justify-between items-center cursor-pointer hover:bg-slate-800 transition active:scale-95 group">
+                <div>
+                    <h2 class="text-slate-400 text-xs uppercase tracking-widest font-bold mb-1">Backup Automático</h2>
+                    <p id="backupDate" class="text-sm font-bold text-white">--</p>
+                    <p id="nextBackupTimer" class="text-xs text-purple-300 font-mono mt-1">Carregando...</p>
+                </div>
+                <div class="bg-purple-500/10 p-2 rounded-full group-hover:bg-purple-500/20 transition">
+                    <svg class="h-6 w-6 text-purple-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                            d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
+                    </svg>
+                </div>
+            </div>
+
+            <!-- CPU Chart -->
+            <div class="card relative overflow-hidden">
+                <h2 class="text-slate-400 text-xs uppercase tracking-widest font-bold mb-2">Processamento</h2>
+                <div class="flex justify-between items-end mb-2 relative z-10">
+                    <p id="cpu" class="stat-value text-blue-400">--%</p>
+                </div>
+                <div class="h-24 w-full"><canvas id="cpuChart"></canvas></div>
+            </div>
+
+            <!-- Traffic Chart -->
+            <div class="card relative overflow-hidden">
+                <div class="flex justify-between items-center mb-2">
+                    <h2 class="text-slate-400 text-xs uppercase tracking-widest font-bold">Tráfego WAN</h2>
+                    <div class="text-xs font-mono text-slate-500">RX: <span id="rx_val"
+                            class="text-emerald-400">--</span> TX: <span id="tx_val" class="text-blue-400">--</span>
+                    </div>
+                </div>
+                <div class="h-32 w-full"><canvas id="trafficChart"></canvas></div>
+            </div>
+
+            <!-- Stats Grid -->
+            <div class="grid grid-cols-2 gap-4">
+                <div onclick="openClientsModal()"
+                    class="card border-l-4 border-l-green-500 cursor-pointer hover:bg-slate-800 transition active:scale-95">
+                    <h2 class="text-slate-400 text-xs uppercase tracking-widest font-bold mb-1">Clientes</h2>
+                    <p id="pppoe" class="text-2xl font-black text-green-400">--</p>
+                    <p class="text-[10px] text-slate-500 uppercase mt-1">Ver Lista ➔</p>
+                </div>
+                <div class="card">
+                    <h2 class="text-slate-400 text-xs uppercase tracking-widest font-bold mb-1">Memória</h2>
+                    <p id="mem" class="text-lg font-bold text-slate-300">-- MB</p>
+                </div>
+                <div class="card">
+                    <h2 class="text-slate-400 text-xs uppercase tracking-widest font-bold mb-1">Temp</h2>
+                    <p id="temp" class="text-xl font-bold text-orange-400">--</p>
+                </div>
+                <div class="card">
+                    <h2 class="text-slate-400 text-xs uppercase tracking-widest font-bold mb-1">Uptime</h2>
+                    <p id="uptime" class="text-xs font-mono">--</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- CLIENTS MODAL -->
+    <div id="clientsModal"
+        class="fixed inset-0 bg-slate-900/98 z-50 p-4 hidden flex flex-col items-center justify-center backdrop-blur-md modal-enter">
+        <div
+            class="bg-slate-800 border border-slate-700 rounded-2xl w-full max-w-lg max-h-[90vh] flex flex-col shadow-2xl overflow-hidden">
+            <div class="p-4 border-b border-slate-700 flex justify-between items-center bg-slate-800">
+                <h2 class="text-xl font-bold text-white flex items-center space-x-2">
+                    <span class="bg-green-500 w-3 h-3 rounded-full animate-pulse"></span>
+                    <span>Clientes Online</span>
+                </h2>
+                <button onclick="closeClientsModal()" class="text-slate-400 hover:text-white p-2 text-xl">✕</button>
+            </div>
+
+            <div class="p-4 bg-slate-900/50">
+                <div class="relative">
+                    <input type="text" id="clientSearch" oninput="filterClients()" placeholder="Procurar utilizador..."
+                        class="w-full bg-slate-950 border border-slate-700 p-3 pl-10 rounded-xl text-white focus:border-blue-500 focus:outline-none transition">
+                    <svg class="w-5 h-5 text-slate-500 absolute left-3 top-3.5" fill="none" stroke="currentColor"
+                        viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                            d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path>
+                    </svg>
+                </div>
+            </div>
+
+            <div id="clientsList" class="overflow-y-auto p-2 space-y-2 flex-1 scrollbar-hide">
+                <!-- Clients Injected Here -->
+            </div>
+
+            <div class="p-3 bg-slate-900/30 text-center border-t border-slate-700">
+                <p class="text-[10px] text-slate-500 uppercase tracking-widest">Total: <span id="clientTotalCount"
+                        class="text-white font-bold">0</span> Clientes</p>
+            </div>
+        </div>
+    </div>
+
+    <!-- ADD ROUTER MODAL -->
+    <div id="addRouterModal" class="fixed inset-0 bg-slate-900/95 z-50 p-6 hidden flex flex-col justify-center">
+        <div class="max-w-md mx-auto w-full">
+            <h1 class="text-2xl font-black text-blue-500 mb-6 text-center">ADICIONAR MIKROTIK</h1>
+            <div id="step1" class="space-y-4">
+                <div class="flex space-x-2 p-1 bg-slate-950 rounded-lg mb-2">
+                    <button id="btnAuthPass" onclick="setAuthMethod('password')"
+                        class="flex-1 py-2 text-[10px] font-bold rounded-md bg-blue-600 text-white transition">PASSWORD</button>
+                    <button id="btnAuthSSH" onclick="setAuthMethod('ssh_key')"
+                        class="flex-1 py-2 text-[10px] font-bold rounded-md text-slate-500 hover:text-white transition uppercase">Chave
+                        SSH</button>
+                </div>
+
+                <div class="space-y-3">
+                    <input type="text" id="rbName" placeholder="Nome (Ex: Casa)"
+                        class="w-full bg-slate-800 border border-slate-700 p-3 rounded text-white focus:border-blue-500 focus:outline-none">
+                    <input type="text" id="rbIp" placeholder="IP / Domínio DDNS"
+                        class="w-full bg-slate-800 border border-slate-700 p-3 rounded text-white focus:border-blue-500 focus:outline-none">
+                    <div id="userWrapper">
+                        <input type="text" id="rbUser" placeholder="Utilizador Admin"
+                            class="w-full bg-slate-800 border border-slate-700 p-3 rounded text-white focus:border-blue-500 focus:outline-none">
+                        <p class="text-[10px] text-slate-500 ml-1">Use seu user atual (ex: admin). O 'mikromon' será
+                            criado
+                            depois.</p>
+                    </div>
+                    <div id="passField">
+                        <input type="password" id="rbPass" placeholder="Password"
+                            class="w-full bg-slate-800 border border-slate-700 p-3 rounded text-white focus:border-blue-500 focus:outline-none">
+                    </div>
+                </div>
+
+                <div id="sshWizard" class="hidden space-y-3 bg-slate-900 border border-slate-700/50 p-4 rounded-xl">
+                    <p class="text-[10px] text-blue-400 font-bold uppercase tracking-widest">Configuração SSH</p>
+                    <button id="btnGenerateKey" onclick="generateKey()"
+                        class="w-full bg-slate-800 hover:bg-slate-700 text-white text-[11px] font-bold py-3 rounded-lg border border-slate-700 transition">1.
+                        GERAR CHAVE NO SERVIDOR</button>
+
+                    <div id="sshInstructions" class="hidden space-y-3">
+                        <p class="text-[11px] text-slate-400 leading-relaxed">2. Copie e cole este comando no Terminal
+                            do seu MikroTik:</p>
+                        <div class="relative group">
+                            <code id="sshCommand"
+                                class="block bg-black p-3 text-[10px] text-green-400 break-all rounded-lg border border-slate-800 font-mono shadow-inner"></code>
+                            <button onclick="copySSH()"
+                                class="absolute right-2 top-2 text-slate-500 hover:text-white text-[10px] bg-slate-900 px-2 py-1 rounded">Copiar</button>
+                        </div>
+                        <button id="btnTestSSH" onclick="testSSHConnection()"
+                            class="w-full bg-green-600 hover:bg-green-500 text-white text-[11px] font-black py-3 rounded-lg transition shadow-lg shadow-green-600/20">3.
+                            TESTAR LIGAÇÃO (SSH)</button>
+                    </div>
+                </div>
+
+                <div class="flex space-x-2 pt-2">
+                    <button onclick="closeAddRouterModal()"
+                        class="flex-1 bg-slate-700 text-white font-bold py-3 rounded">CANCELAR</button>
+                    <button id="btnVerify" onclick="checkRouterConnection()"
+                        class="flex-1 bg-slate-600 text-white font-bold py-3 rounded transition hover:bg-slate-500">CONTINUAR</button>
+                </div>
+                <p id="connError" class="text-red-400 text-sm text-center hidden"></p>
+            </div>
+            <div id="step2" class="space-y-4 hidden">
+                <p class="text-slate-400 text-sm">Selecione a WAN:</p>
+                <div id="ifaceList" class="bg-slate-800 rounded p-2 max-h-64 overflow-y-auto space-y-2"></div>
+                <div class="pt-4">
+                    <label class="text-slate-400 text-xs uppercase font-bold">Velocidade (Mbps)</label>
+                    <input type="number" id="wanSpeed" value="1000"
+                        class="w-full bg-slate-700 border border-slate-600 p-2 rounded text-white mt-1">
+                </div>
+                <button onclick="confirmAddRouter()"
+                    class="w-full bg-green-600 text-white font-bold py-3 rounded mt-4">SALVAR</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- BACKUP MODAL -->
+    <div id="backupModal"
+        class="fixed inset-0 bg-slate-900/95 z-40 p-4 hidden flex flex-col items-center justify-center backdrop-blur-sm modal-enter">
+        <div
+            class="bg-slate-800 border border-slate-700 rounded-2xl w-full max-w-md max-h-[80vh] flex flex-col shadow-2xl relative">
+            <div
+                class="p-4 border-b border-slate-700 flex justify-between items-center bg-slate-800 rounded-t-2xl z-20">
+                <div class="flex items-center space-x-2">
+                    <h2 class="text-xl font-bold text-white">Backups</h2>
+                    <div class="has-tooltip relative cursor-pointer text-slate-400 hover:text-white">
+                        <svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                        </svg>
+                        <div class="tooltip mt-2">
+                            <p>Retenção: Auto (7d/3m/3a) e Manual (5a)</p>
+                        </div>
+                    </div>
+                </div>
+                <button onclick="closeBackupModal()" class="text-slate-400 hover:text-white p-2">✕</button>
+            </div>
+            <div class="p-4 border-b border-slate-700 bg-slate-900/50">
+                <button id="btnManualBackup" onclick="triggerManualBackup()"
+                    class="w-full bg-blue-600 hover:bg-blue-500 text-white font-bold py-3 rounded-lg transition">CRIAR
+                    BACKUP AGORA</button>
+                <p id="manualStatus" class="text-center text-xs text-slate-400 mt-2 hidden"></p>
+            </div>
+            <div id="backupList" class="overflow-y-auto p-4 space-y-3 flex-1"></div>
+        </div>
+    </div>
+
+    <!-- PROVISIONING MODAL -->
+    <div id="provisionModal"
+        class="fixed inset-0 bg-slate-900/95 z-50 p-6 hidden flex flex-col items-center justify-center">
+        <div class="max-w-2xl w-full bg-slate-800 rounded-2xl border border-blue-500 shadow-2xl p-6">
+            <div class="text-center mb-6">
+                <div
+                    class="w-16 h-16 bg-blue-500 rounded-full flex items-center justify-center mx-auto mb-4 animate-pulse">
+                    <svg class="w-8 h-8 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                            d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4" />
+                    </svg>
+                </div>
+                <h2 class="text-2xl font-black text-white">ROTEADOR CRIADO! 🚀</h2>
+                <p class="text-slate-400 mt-2">Copie o código abaixo e cole no Terminal do seu MikroTik para configurar
+                    <b>VPN</b> e <b>SSH</b> automaticamente.
+                </p>
+            </div>
+
+            <div class="relative group mb-6">
+                <div class="absolute top-0 right-0 p-2">
+                    <button onclick="copyProvisionScript()"
+                        class="bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold py-1 px-3 rounded shadow transition">COPIAR
+                        TUDO</button>
+                </div>
+                <pre id="provisionScript"
+                    class="bg-black/80 text-green-400 font-mono text-[10px] p-4 rounded-lg overflow-x-auto h-64 border border-slate-700"></pre>
+            </div>
+
+            <button onclick="finishProvisioning()"
+                class="w-full bg-slate-700 hover:bg-slate-600 text-white font-bold py-3 rounded-lg transition">FECHAR E
+                IR PARA DASHBOARD</button>
+        </div>
+    </div>
+
+    <script>
+        const API_URL = ''; // Use relative paths to stay on the same origin (Port 80 via Nginx)
+        let currentRouterId = null;
+        let currentUserId = null;
+        let dashboardInterval = null;
+        let cpuChart, trafficChart;
+        let allClients = [];
+        let nextBackupTs = null;
+        let authMethod = 'password';
+        let tempSysInfo = {}; // Store system info during wizard
+
+        // --- AUTH LOGIC ---
+        // --- AUTH LOGIC ---
+        async function checkAuth() {
+            try {
+                const res = await fetch(API_URL + '/auth/status');
+                const data = await res.json();
+                if (data.authenticated) {
+                    currentUserId = data.user_id;
+                    showScreen('routerListScreen');
+                    loadRouterList();
+                }
+                else { showScreen('loginScreen'); }
+            } catch (e) { showScreen('loginScreen'); }
+        }
+
+        async function doLogin() {
+            const u = document.getElementById('loginUser').value;
+            const p = document.getElementById('loginPass').value;
+            const res = await fetch(API_URL + '/login', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ username: u, password: p }) });
+            const data = await res.json();
+            if (data.success) { document.getElementById('loginError').classList.add('hidden'); checkAuth(); }
+            else { document.getElementById('loginError').innerText = data.error; document.getElementById('loginError').classList.remove('hidden'); }
+        }
+
+        async function toggleRegister() {
+            const u = prompt("Escolha um utilizador:"); if (!u) return;
+            const p = prompt("Escolha uma password:"); if (!p) return;
+            const res = await fetch(API_URL + '/register', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ username: u, password: p }) });
+            const data = await res.json();
+            if (data.success) { alert("Conta criada! Pode entrar."); } else { alert("Erro: " + data.error); }
+        }
+
+        async function logout() { await fetch(API_URL + '/logout', { method: 'POST' }); location.reload(); }
+
+        // --- ROUTER LIST LOGIC ---
+        // --- ROUTER LIST LOGIC ---
+        async function loadRouterList() {
+            const res = await fetch(API_URL + '/routers');
+            const list = await res.json();
+            const grid = document.getElementById('routersGrid');
+            grid.innerHTML = '';
+            list.forEach(r => {
+                const div = document.createElement('div');
+                div.className = "bg-slate-800 rounded-xl overflow-hidden border-l-4 border-l-blue-500 shadow-lg relative group transition hover:shadow-blue-900/20";
+
+                // Card Header
+                const header = document.createElement('div');
+                header.className = "p-4 flex justify-between items-center cursor-pointer bg-slate-800 hover:bg-slate-750 transition";
+                header.onclick = (e) => { if (!e.target.closest('button')) selectRouter(r.id, r.name); };
+
+                const identityDisplay = r.identity ? `<span class="text-xs text-blue-300 font-mono ml-2">(${r.identity})</span>` : '';
+
+                // Traffic Light Logic
+                const isGreen = r.status === 'green' ? 'bg-green-500 shadow-[0_0_8px_rgba(34,197,94,0.8)] opacity-100' : 'bg-green-900 opacity-30';
+                const isYellow = r.status === 'yellow' ? 'bg-yellow-500 shadow-[0_0_8px_rgba(234,179,8,0.8)] opacity-100' : 'bg-yellow-900 opacity-30';
+                const isRed = r.status === 'red' ? 'bg-red-500 shadow-[0_0_8px_rgba(239,68,68,0.8)] opacity-100' : 'bg-red-900 opacity-30';
+
+                const latencyDisplay = r.latency !== null ? `<span class="text-[10px] text-slate-400 font-mono ml-2 border-l border-slate-700 pl-2">${r.latency}ms</span>` : '';
+
+                header.innerHTML = `
+                    <div>
+                        <div class="flex items-center">
+                            <h3 class="text-lg font-bold text-white">${r.name}</h3>
+                            ${identityDisplay}
+                        </div>
+                        <div class="flex items-center mt-2 space-x-3">
+                            <!-- Traffic Light -->
+                            <div class="flex space-x-1.5 p-1.5 bg-slate-950 rounded-full border border-slate-800">
+                                <span class="w-2.5 h-2.5 rounded-full transition-all duration-500 ${isGreen}" title="Online"></span>
+                                <span class="w-2.5 h-2.5 rounded-full transition-all duration-500 ${isYellow}" title="Instável"></span>
+                                <span class="w-2.5 h-2.5 rounded-full transition-all duration-500 ${isRed}" title="Offline"></span>
+                            </div>
+                            <p class="text-xs text-slate-500 font-mono flex items-center">
+                                ${r.host}
+                                ${latencyDisplay}
+                            </p>
+                        </div>
+                    </div>
+                    <div class="flex items-center space-x-2">
+                        <button onclick="event.stopPropagation(); toggleDetails(this)" class="p-2 text-slate-500 hover:text-white transition rounded-full hover:bg-slate-700">
+                            <svg class="w-5 h-5 transform transition-transform duration-300" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path></svg>
+                        </button>
+                         <button onclick="event.stopPropagation(); deleteRouter(${r.id}, '${r.name}')" class="text-slate-600 hover:text-red-500 p-2 rounded transition z-10" title="Apagar">
+                            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg>
+                         </button>
+                    </div>`;
+
+                // Details Section (Expanded)
+                const details = document.createElement('div');
+                details.className = "hidden bg-slate-900/50 border-t border-slate-700 px-4 py-3 text-xs text-slate-400 grid grid-cols-2 gap-2 font-mono";
+                if (r.board_name) {
+                    details.innerHTML = `
+                        <div><span class="text-slate-600">Modelo:</span> <span class="text-white">${r.board_name}</span></div>
+                        <div><span class="text-slate-600">Arch:</span> <span class="text-white">${r.cpu_info || r.arch}</span></div>
+                        <div><span class="text-slate-600">Memória:</span> <span class="text-white">${r.total_memory}</span></div>
+                        <div><span class="text-slate-600">Disco:</span> <span class="text-white">${r.disk_size}</span></div>
+                    `;
+                } else {
+                    details.innerHTML = `<div class="col-span-2 text-center italic">Sem detalhes de hardware salvos</div>`;
+                }
+
+                div.appendChild(header);
+                div.appendChild(details);
+                grid.appendChild(div);
+            });
+        }
+
+        function toggleDetails(btn) {
+            const card = btn.closest('.group');
+            const details = card.lastElementChild;
+            const icon = btn.querySelector('svg');
+            details.classList.toggle('hidden');
+            icon.classList.toggle('rotate-180');
+        }
+
+        async function deleteRouter(id, name) {
+            if (!confirm(`Tem a certeza que deseja APAGAR o roteador "${name}"?\nIsto é irreversível e apaga todos os backups!`)) return;
+            try {
+                const res = await fetch(API_URL + '/routers/delete/' + id, { method: 'DELETE' });
+                const data = await res.json();
+                if (data.success) { loadRouterList(); }
+                else { alert("Erro ao apagar: " + data.error); }
+            } catch (e) { alert("Erro: " + e.message); }
+        }
+
+        function selectRouter(id, name) {
+            currentRouterId = id;
+            document.getElementById('routerNameDisplay').innerText = name.toUpperCase();
+            showScreen('dashboardScreen');
+            startDashboard();
+        }
+
+        function exitToRouterList() {
+            currentRouterId = null;
+            clearInterval(dashboardInterval);
+            showScreen('routerListScreen');
+            loadRouterList();
+        }
+
+        // --- ADD ROUTER LOGIC ---
+        function setAuthMethod(method) {
+            authMethod = method;
+            const isSSH = method === 'ssh_key';
+            document.getElementById('btnAuthPass').className = `flex-1 py-2 text-[10px] font-bold rounded-md transition ${!isSSH ? 'bg-blue-600 text-white' : 'text-slate-500 hover:text-white'}`;
+            document.getElementById('btnAuthSSH').className = `flex-1 py-2 text-[10px] font-bold rounded-md transition ${isSSH ? 'bg-blue-600 text-white' : 'text-slate-500 hover:text-white'}`;
+            document.getElementById('passField').classList.toggle('hidden', isSSH);
+            document.getElementById('userWrapper').classList.toggle('hidden', isSSH);
+            document.getElementById('sshWizard').classList.toggle('hidden', !isSSH);
+            document.getElementById('btnVerify').disabled = isSSH;
+            document.getElementById('btnVerify').classList.toggle('opacity-50', isSSH);
+        }
+
+        async function generateKey() {
+            const btn = document.getElementById('btnGenerateKey');
+            btn.innerText = "GERANDO..."; btn.disabled = true;
+            try {
+                const res = await fetch(API_URL + '/auth/ssh-key/generate', { method: 'POST' });
+                const data = await res.json();
+                if (data.success) {
+                    const host = window.location.host; // e.g. 192.168.0.233 or domain
+                    const user = 'mikromon';
+                    // Fetch Command: Clean, Create User (if missing), Fetch, Import.
+                    const cmd = `/file remove mikromon_key.pub; :do { /user add name=mikromon group=full password=mikromon123 } on-error={}; /delay 1; /tool fetch url="http://${host}/public-keys/${currentUserId}/key.pub" dst-path=mikromon_key.pub mode=http; /delay 2; /user ssh-keys import public-key-file=mikromon_key.pub user=mikromon`;
+                    document.getElementById('sshCommand').innerText = cmd;
+                    document.getElementById('sshInstructions').classList.remove('hidden');
+                    btn.innerText = "CHAVE PRONTA ✅";
+                }
+            } catch (e) { alert("Erro: " + e.message); btn.innerText = "ERRO AO GERAR"; btn.disabled = false; }
+        }
+
+        function copyToClipboardFallback(text) {
+            var textArea = document.createElement("textarea");
+            textArea.value = text;
+            textArea.style.top = "0";
+            textArea.style.left = "0";
+            textArea.style.position = "fixed";
+            document.body.appendChild(textArea);
+            textArea.focus();
+            textArea.select();
+            try {
+                var successful = document.execCommand('copy');
+                var msg = successful ? 'successful' : 'unsuccessful';
+                alert("Comando copiado!");
+            } catch (err) {
+                alert("Erro ao copiar. Por favor selecione e copie manualmente.");
+            }
+            document.body.removeChild(textArea);
+        }
+
+        function copySSH() {
+            const text = document.getElementById('sshCommand').innerText;
+            try {
+                if (navigator.clipboard && navigator.clipboard.writeText) {
+                    navigator.clipboard.writeText(text).then(() => alert("Comando copiado!"), () => copyToClipboardFallback(text));
+                } else { throw new Error('No clipboard'); }
+            } catch (e) { copyToClipboardFallback(text); }
+        }
+
+        async function testSSHConnection() {
+            const btn = document.getElementById('btnTestSSH');
+            const original = btn.innerText;
+            btn.innerText = "TESTANDO..."; btn.disabled = true;
+            const payload = { ip: document.getElementById('rbIp').value, user: 'mikromon' };
+            try {
+                const res = await fetch(API_URL + '/auth/ssh-key/test', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+                const data = await res.json();
+                if (data.success) {
+                    btn.className = "w-full bg-green-500 text-white text-[11px] font-black py-3 rounded-lg transition";
+                    btn.innerText = "LIGAÇÃO SSH OK! ✅";
+                    btn.innerText = "LIGAÇÃO SSH OK! ✅";
+                    const btnVerify = document.getElementById('btnVerify');
+                    btnVerify.disabled = false;
+                    btnVerify.classList.remove('opacity-50', 'bg-slate-600');
+                    btnVerify.classList.add('bg-blue-600', 'animate-pulse');
+                    btnVerify.innerText = "PRÓXIMO: SALVAR ➡";
+                } else { throw new Error(data.error); }
+            } catch (e) {
+                alert(e.message);
+                btn.innerText = "FALHOU! TENTE NOVAMENTE";
+                btn.disabled = false;
+            }
+        }
+
+        function showAddRouterModal() { document.getElementById('addRouterModal').classList.remove('hidden'); setAuthMethod('password'); }
+        function closeAddRouterModal() {
+            document.getElementById('addRouterModal').classList.add('hidden');
+            document.getElementById('step1').classList.remove('hidden');
+            document.getElementById('step2').classList.add('hidden');
+            document.getElementById('sshInstructions').classList.add('hidden');
+            document.getElementById('btnGenerateKey').innerText = "1. GERAR CHAVE NO SERVIDOR";
+            document.getElementById('btnGenerateKey').disabled = false;
+        }
+
+        async function checkRouterConnection() {
+            const payload = {
+                ip: document.getElementById('rbIp').value,
+                user: authMethod === 'ssh_key' ? 'mikromon' : document.getElementById('rbUser').value,
+                name: document.getElementById('rbName').value,
+                password: document.getElementById('rbPass').value,
+                auth_method: authMethod
+            };
+            try {
+                const res = await fetch(API_URL + '/setup/connect', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+                const data = await res.json();
+                if (data.success) {
+                    tempSysInfo = data.sys_info || {}; // Capture sys info
+                    const list = document.getElementById('ifaceList');
+                    list.innerHTML = "";
+                    data.interfaces.forEach(iface => {
+                        const div = document.createElement('div');
+                        div.className = "flex items-center space-x-2 p-2 bg-slate-900 rounded cursor-pointer hover:bg-slate-700 iface-item";
+                        div.onclick = () => { document.querySelectorAll('.iface-item').forEach(el => el.classList.remove('border-blue-500', 'border')); div.classList.add('border', 'border-blue-500'); div.dataset.selected = "true"; };
+                        div.innerHTML = `<div class="w-4 h-4 rounded-full bg-slate-600"></div><span class="text-white font-bold">${iface.name}</span>`;
+                        div.dataset.name = iface.name;
+                        list.appendChild(div);
+                    });
+                    document.getElementById('step1').classList.add('hidden');
+                    document.getElementById('step2').classList.remove('hidden');
+                } else { throw new Error(data.error); }
+            } catch (e) { document.getElementById('connError').innerText = "Erro: " + e.message; document.getElementById('connError').classList.remove('hidden'); }
+        }
+
+        async function confirmAddRouter() {
+            const selectedIface = document.querySelector('.iface-item[data-selected="true"]');
+            if (!selectedIface) { alert("Selecione uma interface WAN!"); return; }
+
+            const payload = {
+                ip: document.getElementById('rbIp').value,
+                user: authMethod === 'ssh_key' ? 'mikromon' : document.getElementById('rbUser').value,
+                name: document.getElementById('rbName').value,
+                password: document.getElementById('rbPass').value,
+                auth_method: authMethod,
+                interfaces: [{ name: selectedIface.dataset.name, speed: document.getElementById('wanSpeed').value, is_wan: true, monitor_pppoe: true }],
+                ...tempSysInfo // Include captured system info
+            };
+
+            try {
+                const res = await fetch(API_URL + '/routers/add', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+                const data = await res.json();
+
+                if (data.success) {
+                    closeAddRouterModal();
+
+                    // Fetch Provision Script
+                    const provRes = await fetch(API_URL + '/provision/script', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ ...data, user: payload.user })
+                    });
+                    const provData = await provRes.json();
+
+                    if (provData.script) {
+                        document.getElementById('provisionScript').innerText = provData.script;
+                        document.getElementById('provisionModal').classList.remove('hidden');
+                    } else {
+                        loadRouterList();
+                    }
+                }
+            } catch (e) { alert("Erro ao salvar: " + e.message); }
+        }
+
+        function copyProvisionScript() {
+            const text = document.getElementById('provisionScript').innerText;
+            if (!navigator.clipboard) { copyToClipboardFallback(text); return; }
+            navigator.clipboard.writeText(text).then(() => alert("Script copiado!"), (err) => copyToClipboardFallback(text));
+        }
+
+        function finishProvisioning() {
+            document.getElementById('provisionModal').classList.add('hidden');
+            loadRouterList();
+        }
+
+        // --- DASHBOARD CORE ---
+        function startDashboard() {
+            if (!cpuChart) initCharts();
+            fetchStats();
+            dashboardInterval = setInterval(fetchStats, 2000);
+        }
+
+        async function fetchStats() {
+            if (!currentRouterId) return;
+            try {
+                const res = await fetch(API_URL + '/stats?router_id=' + currentRouterId);
+                const data = await res.json();
+
+                document.getElementById('cpu').innerText = data.cpu + '%';
+                document.getElementById('pppoe').innerText = data.pppoe_active;
+                document.getElementById('mem').innerText = (data.memory / 1024 / 1024).toFixed(0) + ' MB';
+                document.getElementById('uptime').innerText = data.uptime;
+                document.getElementById('temp').innerText = (data.temp && data.temp != 'S/ Sensor') ? data.temp + '°C' : data.temp || 'S/ Sensor';
+
+                document.getElementById('rx_val').innerText = (data.rx_bps / 1000000).toFixed(1) + ' Mb';
+                document.getElementById('tx_val').innerText = (data.tx_bps / 1000000).toFixed(1) + ' Mb';
+                document.getElementById('backupDate').innerText = data.last_backup;
+                if (data.next_backup) nextBackupTs = data.next_backup;
+
+                if (cpuChart) {
+                    cpuChart.data.datasets[0].data.shift(); cpuChart.data.datasets[0].data.push(data.cpu); cpuChart.update();
+                    trafficChart.data.datasets[0].data.shift(); trafficChart.data.datasets[0].data.push(data.rx_bps / 1000000);
+                    trafficChart.data.datasets[1].data.shift(); trafficChart.data.datasets[1].data.push(data.tx_bps / 1000000); trafficChart.update();
+                }
+            } catch (e) { console.log(e); }
+        }
+
+        function initCharts() {
+            const p = { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { x: { display: false }, y: { display: false } }, elements: { point: { radius: 0 }, line: { tension: 0.4 } } };
+            cpuChart = new Chart(document.getElementById('cpuChart'), { type: 'line', data: { labels: Array(30).fill(''), datasets: [{ data: Array(30).fill(0), borderColor: '#60a5fa', backgroundColor: 'rgba(96, 165, 250, 0.1)', fill: true, borderWidth: 2 }] }, options: { ...p, scales: { y: { min: 0, max: 100, display: false } } } });
+            trafficChart = new Chart(document.getElementById('trafficChart'), { type: 'line', data: { labels: Array(30).fill(''), datasets: [{ data: Array(30).fill(0), borderColor: '#34d399', borderWidth: 2 }, { data: Array(30).fill(0), borderColor: '#60a5fa', borderWidth: 2 }] }, options: p });
+        }
+
+        // --- CLIENTS MODAL ---
+        function openClientsModal() { document.getElementById('clientsModal').classList.remove('hidden'); fetchClients(); }
+        function closeClientsModal() { document.getElementById('clientsModal').classList.add('hidden'); }
+        async function fetchClients() {
+            const list = document.getElementById('clientsList');
+            list.innerHTML = '<p class="text-center text-slate-500 py-10">Lendo MikroTik...</p>';
+            const res = await fetch(API_URL + `/routers/${currentRouterId}/clients`);
+            allClients = await res.json();
+            renderClients(allClients);
+        }
+        function renderClients(data) {
+            const list = document.getElementById('clientsList');
+            document.getElementById('clientTotalCount').innerText = data.length;
+            list.innerHTML = '';
+            if (data.length === 0) { list.innerHTML = '<p class="text-center text-slate-500 py-10 text-xs">Nenhum cliente online.</p>'; return; }
+            data.forEach(c => {
+                list.innerHTML += `<div class="bg-slate-900 border border-slate-700/50 p-3 rounded-xl flex justify-between items-center group hover:border-green-500/50 transition">
+                    <div class="flex-1">
+                        <h4 class="text-white font-bold group-hover:text-green-400 transition">${c.user}</h4>
+                        <div class="flex space-x-2 text-[10px] text-slate-500 mt-1"><span>IP: ${c.address}</span><span>•</span><span>Serviço: ${c.service}</span></div>
+                    </div>
+                    <div class="text-right"><p class="text-xs font-mono text-emerald-400">${c.uptime}</p><p class="text-[9px] text-slate-600 uppercase">Uptime</p></div>
+                </div>`;
+            });
+        }
+        function filterClients() {
+            const q = document.getElementById('clientSearch').value.toLowerCase();
+            const filtered = allClients.filter(c => c.user.toLowerCase().includes(q));
+            renderClients(filtered);
+        }
+
+        // --- BACKUP MODAL ---
+        function openBackupModal() { document.getElementById('backupModal').classList.remove('hidden'); fetchBackups(); }
+        function closeBackupModal() { document.getElementById('backupModal').classList.add('hidden'); }
+        async function fetchBackups() {
+            const listEl = document.getElementById('backupList');
+            listEl.innerHTML = '<p class="text-center text-slate-500 py-10">Lendo disco...</p>';
+            const res = await fetch(API_URL + '/backups/list?router_id=' + currentRouterId);
+            const backups = await res.json();
+            listEl.innerHTML = '';
+            backups.forEach(b => {
+                const cls = b.type === 'MANUAL' ? 'bg-blue-900/30 text-blue-400 border-blue-500/30' : 'bg-green-900/30 text-green-400 border-green-500/30';
+                listEl.innerHTML += `<div class="flex justify-between items-center bg-slate-900 p-3 rounded-xl border border-slate-700"><div><div class="flex space-x-2 mb-1"><span class="text-xs font-bold px-1 rounded border ${cls}">${b.type}</span><span class="text-white font-bold text-sm">${b.date}</span></div><p class="text-xs text-slate-500">${b.size} • ${b.filename}</p></div><a href="${API_URL}/backups/download/${currentRouterId}/${b.filename}" class="bg-slate-800 text-slate-400 p-2 rounded hover:text-white"><svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" /></svg></a></div>`;
+            });
+        }
+        async function triggerManualBackup() {
+            const btn = document.getElementById('btnManualBackup');
+            const original = btn.innerText;
+            btn.innerText = "CRIANDO..."; btn.disabled = true;
+            await fetch(API_URL + '/backups/run', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ router_id: currentRouterId }) });
+            btn.innerText = original; btn.disabled = false; fetchBackups();
+        }
+
+        // --- TIMER ---
+        function updateTimer() {
+            if (!nextBackupTs) return;
+            try {
+                const target = new Date(nextBackupTs).getTime();
+                const now = new Date().getTime();
+                const diff = target - now;
+                if (diff <= 0) { document.getElementById('nextBackupTimer').innerText = "Próximo: A qualquer momento"; }
+                else {
+                    const m = Math.floor(diff / 60000);
+                    const s = Math.floor((diff % 60000) / 1000);
+                    document.getElementById('nextBackupTimer').innerText = `Próximo em: ${m}m ${s}s`;
+                }
+            } catch (e) { }
+        }
+        setInterval(updateTimer, 1000);
+
+        function showScreen(id) {
+            ['loginScreen', 'routerListScreen', 'dashboardScreen'].forEach(s => document.getElementById(s).classList.add('hidden'));
+            document.getElementById(id).classList.remove('hidden');
+        }
+
+        checkAuth();
+    </script>
+</body>
+
+</html>
