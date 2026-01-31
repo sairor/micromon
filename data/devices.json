@@ -1,0 +1,32 @@
+[
+  {
+    "id": "697dafef585dcc510bfa5603",
+    "name": "OLT-Huawei-Principal",
+    "ip": "192.168.88.254",
+    "type": "OLT",
+    "username": "",
+    "password": "",
+    "port": 0,
+    "owner": "admin"
+  },
+  {
+    "id": "697dafef585dcc510bfa5604",
+    "name": "OLT-ZTE-Bairro-Norte",
+    "ip": "10.50.0.1",
+    "type": "OLT",
+    "username": "",
+    "password": "",
+    "port": 0,
+    "owner": "admin"
+  },
+  {
+    "id": "697dafef585dcc510bfa5605",
+    "name": "Router-Mk-Main",
+    "ip": "10.0.0.1",
+    "type": "ROUTER",
+    "username": "",
+    "password": "",
+    "port": 0,
+    "owner": "admin"
+  }
+]

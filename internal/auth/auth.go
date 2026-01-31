@@ -109,19 +109,24 @@ func ChangePasswordHandler(w http.ResponseWriter, r *http.Request) {
 func JwtMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		authHeader := r.Header.Get("Authorization")
-		if authHeader == "" {
-			http.Error(w, "Authorization header required", http.StatusUnauthorized)
-			return
+		tokenStr := ""
+
+		if authHeader != "" {
+			bearerToken := strings.Split(authHeader, " ")
+			if len(bearerToken) == 2 {
+				tokenStr = bearerToken[1]
+			}
+		} else {
+			tokenStr = r.URL.Query().Get("token")
 		}
 
-		bearerToken := strings.Split(authHeader, " ")
-		if len(bearerToken) != 2 {
-			http.Error(w, "Invalid token format", http.StatusUnauthorized)
+		if tokenStr == "" {
+			http.Error(w, "Authorization header or token required", http.StatusUnauthorized)
 			return
 		}
 
 		claims := &Claims{}
-		token, err := jwt.ParseWithClaims(bearerToken[1], claims, func(token *jwt.Token) (interface{}, error) {
+		token, err := jwt.ParseWithClaims(tokenStr, claims, func(token *jwt.Token) (interface{}, error) {
 			return SecretKey, nil
 		})
 

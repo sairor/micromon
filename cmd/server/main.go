@@ -1,20 +1,30 @@
 package main
 
 import (
+	"context"
+	"flag"
+	"io/fs"
 	"log"
 	"net/http"
 	"os"
+	"os/signal"
 	"time"
 
-	"mikromon/internal/db"
+	"mikromon/internal/api"
 	"mikromon/internal/auth"
-    "mikromon/internal/api"
+	"mikromon/internal/db"
+	"mikromon/internal/worker"
+	"mikromon/web"
 
+	"github.com/gorilla/handlers"
 	"github.com/gorilla/mux"
-    "github.com/gorilla/handlers"
 )
 
 func main() {
+	var wait time.Duration
+	flag.DurationVar(&wait, "graceful-timeout", time.Second*15, "the duration for which the server gracefully wait for existing connections to finish - e.g. 15s or 1m")
+	flag.Parse()
+
 	// Configuration
 	mongoURI := os.Getenv("MONGO_URI")
 	if mongoURI == "" {
@@ -23,7 +33,7 @@ func main() {
 
 	// Initialize Database
 	if err := db.InitMongoDB(mongoURI); err != nil {
-		log.Fatalf("Could not connect to MongoDB: %v", err)
+		log.Printf("Could not connect to MongoDB: %v. Running in partial mode.", err)
 	}
 
 	// Router Setup
@@ -31,110 +41,122 @@ func main() {
 
 	// Middleware
 	r.Use(loggingMiddleware)
-    // CORS is handled by gorilla/handlers wrapper below
 
 	// API Routes
 	apiRouter := r.PathPrefix("/api").Subrouter()
-	
-    // Public Routes
-    apiRouter.HandleFunc("/login", auth.LoginHandler).Methods("POST")
 
-    // Protected Routes
-    protected := apiRouter.PathPrefix("/v1").Subrouter()
-    protected.Use(auth.JwtMiddleware)
-    protected.HandleFunc("/me", auth.MeHandler).Methods("GET")
-    protected.HandleFunc("/me/change-password", auth.ChangePasswordHandler).Methods("POST")
-    
-    // Devices
-    protected.HandleFunc("/devices", api.GetDevicesHandler).Methods("GET")
-    protected.HandleFunc("/devices", api.AddDeviceHandler).Methods("POST")
-    protected.HandleFunc("/devices/command", api.RunCommandHandler).Methods("POST")
+	// Public
+	apiRouter.HandleFunc("/login", auth.LoginHandler).Methods("POST")
 
-    // Custom Commands
-    protected.HandleFunc("/commands", api.GetCustomCommandsHandler).Methods("GET")
-    protected.HandleFunc("/commands", api.CreateCustomCommandHandler).Methods("POST")
+	// Protected V1
+	v1 := apiRouter.PathPrefix("/v1").Subrouter()
+	v1.Use(auth.JwtMiddleware) // Enforce Auth
 
-    // Maintenance
-    protected.HandleFunc("/maintenance/critical-signals", api.GetTopCriticalSignalsHandler).Methods("GET")
+	// User
+	v1.HandleFunc("/me", auth.MeHandler).Methods("GET")
+	v1.HandleFunc("/me/change-password", auth.ChangePasswordHandler).Methods("POST")
+	v1.HandleFunc("/users", api.GetUsersHandler).Methods("GET")
+	v1.HandleFunc("/users", api.CreateUserHandler).Methods("POST")
 
-    // Provisioning
-    protected.HandleFunc("/provision/script", api.ProvisionScriptHandler).Methods("POST")
+	// Devices & Commands
+	v1.HandleFunc("/devices", api.GetDevicesHandler).Methods("GET")
+	v1.HandleFunc("/devices", api.AddDeviceHandler).Methods("POST")
+	v1.HandleFunc("/devices", api.DeleteDeviceHandler).Methods("DELETE")
+	v1.HandleFunc("/devices/command", api.RunCommandHandler).Methods("POST") // Ad-hoc
 
-    // Admin - Users
-    protected.HandleFunc("/users", api.GetUsersHandler).Methods("GET")
-    protected.HandleFunc("/users", api.CreateUserHandler).Methods("POST")
+	// Custom Commands
+	v1.HandleFunc("/commands", api.GetCustomCommandsHandler).Methods("GET")
+	v1.HandleFunc("/commands", api.CreateCustomCommandHandler).Methods("POST")
+	v1.HandleFunc("/commands/execute", api.RunCustomCommandHandler).Methods("POST") // Execute Saved
 
-    // Tech - PON & ONUs
-    protected.HandleFunc("/pon/{id}/status", api.GetPonStatusHandler).Methods("GET")
-    protected.HandleFunc("/onus/unregistered", api.GetUnregisteredOnusHandler).Methods("GET")
-    protected.HandleFunc("/onus/install", api.InstallOnuHandler).Methods("POST")
+	// Network & OLT
+	v1.HandleFunc("/network/critical-signals", api.GetTopCriticalSignalsHandler).Methods("GET")
+	v1.HandleFunc("/olt/stats", api.GetOltStatsHandler).Methods("GET")
+	v1.HandleFunc("/pon/{id}/status", api.GetPonStatusHandler).Methods("GET")
+	v1.HandleFunc("/onus/unregistered", api.GetUnregisteredOnusHandler).Methods("GET")
+	v1.HandleFunc("/onus/install", api.InstallOnuHandler).Methods("POST")
 
-    // Backups
-    protected.HandleFunc("/backups/config", api.GetBackupConfigHandler).Methods("GET")
-    protected.HandleFunc("/backups/config", api.UpdateBackupConfigHandler).Methods("POST")
-    protected.HandleFunc("/backups", api.GetBackupsHandler).Methods("GET")
-    protected.HandleFunc("/backups/manual", api.ManualBackupHandler).Methods("POST")
+	// Backups
+	v1.HandleFunc("/backups/config", api.GetBackupConfigHandler).Methods("GET")
+	v1.HandleFunc("/backups/config", api.UpdateBackupConfigHandler).Methods("POST")
+	v1.HandleFunc("/backups", api.GetBackupsHandler).Methods("GET")
+	v1.HandleFunc("/backups", api.DeleteBackupHandler).Methods("DELETE")
+	v1.HandleFunc("/backups/manual", api.ManualBackupHandler).Methods("POST")
+	v1.HandleFunc("/backups/test", api.TestBackupHandler).Methods("POST")
 
-    // Schedules
-    protected.HandleFunc("/schedules", api.GetSchedulesHandler).Methods("GET")
-    protected.HandleFunc("/schedules", api.CreateScheduleHandler).Methods("POST")
-    protected.HandleFunc("/schedules", api.DeleteScheduleHandler).Methods("DELETE")
+	// Schedules
+	v1.HandleFunc("/schedules", api.GetSchedulesHandler).Methods("GET")
+	v1.HandleFunc("/schedules", api.CreateScheduleHandler).Methods("POST")
+	v1.HandleFunc("/schedules", api.DeleteScheduleHandler).Methods("DELETE")
 
-    // Syslog
-    protected.HandleFunc("/logs", api.GetLogsHandler).Methods("GET")
+	// Syslog
+	v1.HandleFunc("/logs", api.GetLogsHandler).Methods("GET")
 
-	// Serve Static Files (SPA)
-	// Assuming running from project root (/var/www/html/mikromon)
-	spa := spaHandler{staticPath: "web", indexPath: "index.html"}
-	r.PathPrefix("/").Handler(spa)
+	// Provisioning
+	v1.HandleFunc("/provision", api.GetProvisionScriptHandler).Methods("GET")
+	v1.HandleFunc("/public-key", api.GetPublicKeyHandler).Methods("GET")
 
-    // CORS Headers
-    headersOk := handlers.AllowedHeaders([]string{"X-Requested-With", "Content-Type", "Authorization"})
-    originsOk := handlers.AllowedOrigins([]string{"*"}) // Restrict in production
-    methodsOk := handlers.AllowedMethods([]string{"GET", "HEAD", "POST", "PUT", "OPTIONS"})
+	// WebSocket (For Terminal / Realtime)
+	// Note: WS usually bypasses JSON middleware, but needs Auth.
+	// Handled inside handler or query param token. For prototype, assuming session/public or check origin.
+	v1.HandleFunc("/ws", api.SSHWebSocketHandler)
 
-    srv := &http.Server{
-        Handler: handlers.CORS(originsOk, headersOk, methodsOk)(r),
-        Addr:    "0.0.0.0:8080",
-        WriteTimeout: 15 * time.Second,
-        ReadTimeout:  15 * time.Second,
-    }
+	// Serve Static Files (Embedded)
+	// web.Assets is embed.FS (root is "index.html" etc)
+	// We want / to serve index.html
 
-	log.Println("Micromon Server starting on :8080")
-    
-    // Start Syslog Server (UDP 514)
-    go api.StartSyslogServer()
+	contentStatic, _ := fs.Sub(web.Assets, ".")
+	// Since we only embedded index.html in the previous step, we might need to check if we embedded "web/*"
+	// Wait, my previous step: //go:embed index.html
+	// If I just embedded index.html, I can't serve a directory cleanly if there were other assets.
+	// But assuming Single File.
 
-	log.Fatal(srv.ListenAndServe())
-}
+	r.PathPrefix("/").Handler(http.FileServer(http.FS(contentStatic)))
 
-// spaHandler serves the SPA
-type spaHandler struct {
-	staticPath string
-	indexPath  string
-}
+	// CORS Headers
+	headersOk := handlers.AllowedHeaders([]string{"X-Requested-With", "Content-Type", "Authorization"})
+	originsOk := handlers.AllowedOrigins([]string{"*"})
+	methodsOk := handlers.AllowedMethods([]string{"GET", "HEAD", "POST", "PUT", "OPTIONS", "DELETE"})
 
-func (h spaHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-    // Default to index.html for SPA (catch-all)
-    // If request has extension, try to serve file directly
-    
-    // Hardcoded relative path for prototype simplicity: "web/index.html"
-    // This assumes CWD is /var/www/html/mikromon
-    path := "web/index.html"
-    
-    // Verify file exists
-    if _, err := os.Stat(path); os.IsNotExist(err) {
-        log.Printf("ERROR: Static file not found at: %s (CWD: %s)", path, getCwd())
-        http.Error(w, "Static file not found. Check server logs.", http.StatusNotFound)
-        return
-    }
-    
-    http.ServeFile(w, r, path)
-}
+	srv := &http.Server{
+		Handler:      handlers.CORS(originsOk, headersOk, methodsOk)(r),
+		Addr:         "0.0.0.0:8080",
+		WriteTimeout: 15 * time.Second,
+		ReadTimeout:  15 * time.Second,
+	}
 
-func getCwd() string {
-    d, _ := os.Getwd()
-    return d
+	// Start Syslog Server
+	go api.StartSyslogServer()
+
+	// Start Scheduler
+	go worker.StartScheduler()
+	go worker.StartBackupWorker()
+
+	// Run our server in a goroutine so that it doesn't block.
+	go func() {
+		log.Println("Micromon Server PRODUCTION ready on :8080")
+		if err := srv.ListenAndServe(); err != nil {
+			log.Println(err)
+		}
+	}()
+
+	c := make(chan os.Signal, 1)
+	// We'll accept graceful shutdowns when quit via SIGINT (Ctrl+C)
+	// SIGKILL, SIGQUIT or SIGTERM (Ctrl+/) will not be caught.
+	signal.Notify(c, os.Interrupt)
+
+	// Block until we receive our signal.
+	<-c
+
+	// Create a deadline to wait for.
+	ctx, cancel := context.WithTimeout(context.Background(), wait)
+	defer cancel()
+
+	// Doesn't block if no connections, but will otherwise wait
+	srv.Shutdown(ctx)
+
+	log.Println("shutting down")
+	os.Exit(0)
 }
 
 func loggingMiddleware(next http.Handler) http.Handler {

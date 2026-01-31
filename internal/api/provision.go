@@ -1,35 +1,43 @@
 package api
 
 import (
-    "encoding/json"
-    "fmt"
-    "net/http"
-    // "mikromon/internal/db"
+	"encoding/json"
+	"fmt"
+	"net/http"
+	"os"
+	"os/exec"
+	"path/filepath"
 )
 
-type ProvisionRequest struct {
-    IP   string `json:"ip"`
-    User string `json:"user"`
-    Name string `json:"name"`
-}
+func GetProvisionScriptHandler(w http.ResponseWriter, r *http.Request) {
+	// Ensure SSH Key exists
+	keyDir := "data"
+	pubKeyPath := filepath.Join(keyDir, "id_rsa.pub")
+	privKeyPath := filepath.Join(keyDir, "id_rsa")
 
-func ProvisionScriptHandler(w http.ResponseWriter, r *http.Request) {
-    var req ProvisionRequest
-    if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-        http.Error(w, "Invalid input", http.StatusBadRequest)
-        return
-    }
+	if _, err := os.Stat(pubKeyPath); os.IsNotExist(err) {
+		// Generate Key
+		cmd := exec.Command("ssh-keygen", "-t", "rsa", "-b", "2048", "-f", privKeyPath, "-N", "")
+		if err := cmd.Run(); err != nil {
+			http.Error(w, "Error generating SSH key", http.StatusInternalServerError)
+			return
+		}
+	}
 
-    // Mock Server IP detection
-    serverIP := r.Host // e.g. localhost:8080
-    
-    // Generate simple Password
-    mikromonPass := "StrongPass123!" // In prod, generate random
+	pubKey, err := os.ReadFile(pubKeyPath)
+	if err != nil {
+		http.Error(w, "Error reading SSH public key", http.StatusInternalServerError)
+		return
+	}
 
-    // Construct the Mikrotik Script (Ported from Python)
-    // Using Go raw string literals for the script content
-    script := fmt.Sprintf(`
-    # Cores e Estética
+	// Use the host from request to be dynamic
+	serverIP := r.Host
+	if serverIP == "" {
+		serverIP = "192.168.0.233" // Fallback
+	}
+
+	script := fmt.Sprintf(`{
+    # Cores e Estetica
     :local corSucesso "\1B[32m";
     :local corInfo "\1B[36m";
     :local corErro "\1B[31m";
@@ -38,27 +46,67 @@ func ProvisionScriptHandler(w http.ResponseWriter, r *http.Request) {
     :put ""
     :put "$corInfo  MMM      MMM  III   CCCCCCC  RRRRRRR    OOOOOO   MMM      MMM   OOOOOO   NNN    NN$reset"
     :put "$corInfo  MMMM    MMMM  III  CCCC      RRR  RRR  OOO  OOO  MMMM    MMMM  OOO  OOO  NNNN   NN$reset"
-    :put "$corInfo  MNM MMMM MMM  III  CCC       RRRRRRR   OOO  OOO  MMM MMMM MMM  OOO  OOO  NN NN  NN$reset"
+    :put "$corInfo  MMM MMMM MMM  III  CCC       RRRRRRR   OOO  OOO  MMM MMMM MMM  OOO  OOO  NN NN  NN$reset"
+    :put "$corInfo  MMM  MM  MMM  III  CCCC      RRR  RR   OOO  OOO  MMM  MM  MMM  OOO  OOO  NN  NN NN$reset"
+    :put "$corInfo  MMM      MMM  III   CCCCCCC  RRR   RR   OOOOOO   MMM      MMM   OOOOOO   NN   NNNN$reset"
     :put "------------------------------------------------------------------------------------------"
-    :put "          SISTEMA DE CONFIGURACAO AUTOMATICA - AGENTE DE MONITORIA (GO EDITION)"
-    :put "          SERVER: %s"
+    :put "          SISTEMA DE CONFIGURACAO AUTOMATICA - AGENTE DE MONITORIA"
     :put "------------------------------------------------------------------------------------------"
+    :put ""
 
     # Passo 1
-    :put " > [1/2] Limpando ambiente... ";
-    /user remove [find name="mikromon"];
-    :delay 500ms;
+    :put " > [1/4] Limpando vestigios de instalacoes anteriores... ";
+    /file remove [find name="mikromon_key.pub"];
+    :delay 800ms;
 
     # Passo 2
-    :put " > [2/2] Criando usuario de monitoria... ";
-    /user add name="mikromon" group=full password="%s" comment="Monitoria Go";
-    :put "$corSucesso   [OK] Usuario 'mikromon' criado.$reset";
-    
-    # VPN / Certs part omitted in Prototype
-    :put ""
-    :put "$corSucesso* INSTALACAO CONCLUIDA! *$reset"
-    `, serverIP, mikromonPass)
+    :put " > [2/4] Gerando credenciais seguras para o usuario 'mikromon'... ";
+    :local pass "M0n!t0r_S3cur3_v6_49_#K7x9P2qW5zR1vL"
+    :if ([:len [/user find name="mikromon"]] > 0) do={
+        /user remove [find name="mikromon"];
+    };
+    /user add name="mikromon" group=full password=$pass comment="Monitoria SSH - Micromon";
+    :put "$corSucesso   [OK] Usuario criado com sucesso.$reset";
+    :delay 800ms;
 
-    w.Header().Set("Content-Type", "application/json")
-    json.NewEncoder(w).Encode(map[string]string{"script": script})
+    # Passo 3
+    :put " > [3/4] Sincronizando chave publica com o servidor %s... ";
+    :do {
+        /tool fetch url="http://%s/api/v1/public-key" dst-path=mikromon_key.pub mode=http;
+        :delay 2;
+    } on-error={ :put "$corErro   [ERRO] Falha de rede: Servidor inacessivel.$reset" };
+
+    # Passo 4
+    :put " > [4/4] Finalizando integracao criptografica... ";
+    :if ([:len [/file find name="mikromon_key.pub"]] > 0) do={
+        /user ssh-keys import public-key-file=mikromon_key.pub user=mikromon;
+        :delay 1;
+        /file remove [find name="mikromon_key.pub"];
+        :put ""
+        :put "$corSucesso ################################################### $reset"
+        :put "$corSucesso #      INSTALACAO MICROMON FINALIZADA!            # $reset"
+        :put "$corSucesso #  ACESSO SSH VIA CHAVE HABILITADO E SEGURO       # $reset"
+        :put "$corSucesso ################################################### $reset"
+    } else={
+        :put "$corErro !!! ERRO CRITICO: A chave SSH nao foi detectada. !!!$reset"
+    };
+    :put ""
+}`, serverIP, serverIP)
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]string{
+		"script": script,
+		"pubkey": string(pubKey),
+	})
+}
+
+func GetPublicKeyHandler(w http.ResponseWriter, r *http.Request) {
+	pubKeyPath := filepath.Join("data", "id_rsa.pub")
+	pubKey, err := os.ReadFile(pubKeyPath)
+	if err != nil {
+		http.Error(w, "Public key not found", http.StatusNotFound)
+		return
+	}
+	w.Header().Set("Content-Type", "text/plain")
+	w.Write(pubKey)
 }

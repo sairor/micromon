@@ -27,3 +27,6 @@ Thumbs.db
 mikromon_debug.db
 paramiko_debug.log
 server.log
+mikromon
+node_modules/
+dist/

@@ -18,8 +18,8 @@ type LogEntry struct {
 }
 
 var (
-	Logs      []LogEntry
-	LogMutex  sync.Mutex
+	Logs       []LogEntry
+	LogMutex   sync.Mutex
 	logCounter int
 )
 
