@@ -30,20 +30,22 @@ type CommandRequest struct {
     Command  string `json:"command"`
 }
 
+var MockDevices = []Device{
+    {ID: primitive.NewObjectID(), Name: "OLT-Huawei-Principal", IP: "192.168.88.254", Type: "OLT"},
+    {ID: primitive.NewObjectID(), Name: "OLT-ZTE-Bairro-Norte", IP: "10.50.0.1", Type: "OLT"},
+    {ID: primitive.NewObjectID(), Name: "Router-Mk-Main", IP: "10.0.0.1", Type: "ROUTER"},
+    {ID: primitive.NewObjectID(), Name: "Router-Borda-IX", IP: "172.16.0.1", Type: "ROUTER"},
+    {ID: primitive.NewObjectID(), Name: "SW-Core-Datacenter", IP: "10.0.0.2", Type: "SWITCH"},
+    {ID: primitive.NewObjectID(), Name: "SW-Distrib-Torre-1", IP: "10.0.0.10", Type: "SWITCH"},
+}
+
 func GetDevicesHandler(w http.ResponseWriter, r *http.Request) {
     collection := db.GetCollection("devices")
     var devices []Device
 
     if collection == nil {
-        // Mock Data
-        devices = []Device{
-            {ID: primitive.NewObjectID(), Name: "OLT-Huawei-Principal", IP: "192.168.88.254", Type: "OLT"},
-            {ID: primitive.NewObjectID(), Name: "OLT-ZTE-Bairro-Norte", IP: "10.50.0.1", Type: "OLT"},
-            {ID: primitive.NewObjectID(), Name: "Router-Mk-Main", IP: "10.0.0.1", Type: "ROUTER"},
-            {ID: primitive.NewObjectID(), Name: "Router-Borda-IX", IP: "172.16.0.1", Type: "ROUTER"},
-            {ID: primitive.NewObjectID(), Name: "SW-Core-Datacenter", IP: "10.0.0.2", Type: "SWITCH"},
-            {ID: primitive.NewObjectID(), Name: "SW-Distrib-Torre-1", IP: "10.0.0.10", Type: "SWITCH"},
-        }
+        // Mock Data (In-Memory Persistence)
+        devices = MockDevices
     } else {
         cursor, err := collection.Find(context.TODO(), bson.M{})
         if err != nil {
@@ -69,10 +71,18 @@ func AddDeviceHandler(w http.ResponseWriter, r *http.Request) {
     }
 
     collection := db.GetCollection("devices")
-    _, err := collection.InsertOne(context.TODO(), device)
-    if err != nil {
-        http.Error(w, "Error adding device", http.StatusInternalServerError)
-        return
+    
+    if collection == nil {
+        // Mock Add
+        device.ID = primitive.NewObjectID()
+        MockDevices = append(MockDevices, device)
+        fmt.Printf("MOCK: Added device %s (%s)\n", device.Name, device.Type)
+    } else {
+        _, err := collection.InsertOne(context.TODO(), device)
+        if err != nil {
+            http.Error(w, "Error adding device", http.StatusInternalServerError)
+            return
+        }
     }
 
     w.WriteHeader(http.StatusCreated)

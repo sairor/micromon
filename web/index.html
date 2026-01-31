@@ -109,10 +109,34 @@
                         <span>🛠️</span> Portal Técnico
                     </button>
                     <button
+                        class="w-full text-left p-2 hover:bg-gray-800 rounded text-sm flex items-center gap-2 text-gray-300 hover:text-white"
+                        onclick="showPage('inventory')">
+                        <span>📦</span> Equipamentos
+                    </button>
+                    <button
+                        class="w-full text-left p-2 hover:bg-gray-800 rounded text-sm flex items-center gap-2 text-gray-300 hover:text-white"
+                        onclick="showPage('backups')">
+                        <span>💾</span> Backups
+                    </button>
+                    <button
+                        class="w-full text-left p-2 hover:bg-gray-800 rounded text-sm flex items-center gap-2 text-orange-400 hover:text-white"
+                        onclick="showPage('logs')">
+                        <span>📜</span> Logs do Sistema
+                    </button>
+                    <button
                         class="w-full text-left p-2 hover:bg-gray-800 rounded text-sm flex items-center gap-2 text-purple-400 hover:text-white"
                         onclick="showPage('team')">
                         <span>👥</span> Equipe (Admin)
                     </button>
+                    <!-- Super Admin / Revenda -->
+                    <div id="nav-super-admin" class="hidden">
+                        <div class="border-t border-gray-800 my-2"></div>
+                        <button
+                            class="w-full text-left p-2 hover:bg-yellow-900/40 rounded text-sm flex items-center gap-2 text-yellow-500 hover:text-white"
+                            onclick="showPage('revenda')">
+                            <span>💎</span> Painel de Revenda
+                        </button>
+                    </div>
                 </nav>
             </div>
             <div class="p-4 border-t border-gray-800">
@@ -124,8 +148,12 @@
                         <div class="text-xs text-neon-green">Conectado</div>
                     </div>
                 </div>
-                <button onclick="logout()" class="mt-3 text-xs text-red-500 hover:underline w-full text-left">Encerrar
-                    Sessão</button>
+                <div class="mt-3 flex flex-col gap-1">
+                    <button onclick="openChangePasswordModal()"
+                        class="text-[10px] text-blue-400 hover:underline text-left">Alterar Senha</button>
+                    <button onclick="logout()" class="text-[10px] text-red-500 hover:underline text-left">Encerrar
+                        Sessão</button>
+                </div>
             </div>
         </aside>
 
@@ -158,8 +186,73 @@
 
             <!-- Page: Automation -->
             <div id="page-automation" class="page-content hidden">
-                <h2 class="text-2xl font-bold mb-6 border-b border-gray-800 pb-2">Comandos Personalizados</h2>
-                <div id="commands-grid"></div>
+                <div class="flex justify-between items-center mb-6">
+                    <h2 class="text-2xl font-bold">Automação</h2>
+                    <div id="auto-header-actions">
+                        <button onclick="openCommandModal()"
+                            class="bg-blue-600 hover:bg-blue-500 text-white px-4 py-2 rounded text-xs font-bold transition-all">
+                            + Novo Comando
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Tabs Header -->
+                <div class="flex gap-6 mb-8 border-b border-gray-800">
+                    <button onclick="switchAutoTab('commands')" id="tab-btn-commands"
+                        class="pb-3 border-b-2 border-neon-green text-neon-green font-bold text-sm transition-all focus:outline-none uppercase">Comandos
+                        Rápidos</button>
+                    <button onclick="switchAutoTab('schedules')" id="tab-btn-schedules"
+                        class="pb-3 border-b-2 border-transparent text-gray-500 hover:text-white font-bold text-sm transition-all focus:outline-none uppercase">Agendamentos
+                        de Scripts</button>
+                </div>
+
+                <!-- Tab: Commands -->
+                <div id="tab-content-commands">
+                    <!-- Device Select for Automation -->
+                    <div class="mb-8">
+                        <label class="block text-xs font-mono text-gray-500 mb-2 uppercase">1. SELECIONE O EQUIPAMENTO
+                            ALVO</label>
+                        <div id="automation-device-selector" class="flex gap-3 overflow-x-auto pb-4 scrollbar-hide">
+                            <!-- Dynamic Device Pills -->
+                        </div>
+                    </div>
+
+                    <!-- Commands Grid -->
+                    <div id="automation-commands-container" class="hidden">
+                        <label class="block text-xs font-mono text-gray-500 mb-4 uppercase">2. COMANDOS
+                            DISPONÍVEIS</label>
+                        <div id="commands-grid"
+                            class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6 gap-4">
+                            <!-- Dynamic Command Buttons -->
+                        </div>
+                    </div>
+
+                    <div id="automation-no-device"
+                        class="text-center py-20 border-2 border-dashed border-gray-800 rounded-xl text-gray-600">
+                        Selecione um equipamento acima para ver os comandos compatíveis.
+                    </div>
+                </div>
+
+                <!-- Tab: Schedules -->
+                <div id="tab-content-schedules" class="hidden">
+                    <div class="bg-gray-900 border border-gray-800 rounded-xl overflow-hidden">
+                        <table class="w-full text-left text-sm text-gray-400">
+                            <thead class="bg-black text-xs uppercase font-bold text-gray-500 border-b border-gray-800">
+                                <tr>
+                                    <th class="p-4">Tarefa</th>
+                                    <th class="p-4">Equipamento</th>
+                                    <th class="p-4">Execução</th>
+                                    <th class="p-4">Recorrência</th>
+                                    <th class="p-4">Status</th>
+                                    <th class="p-4 text-right">Ação</th>
+                                </tr>
+                            </thead>
+                            <tbody id="schedule-list-body" class="divide-y divide-gray-800">
+                                <!-- Dynamic Rows -->
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
             </div>
 
             <!-- Page: Team (Admin) -->
@@ -228,7 +321,319 @@
                 </div>
             </div>
 
+            <!-- Page: Inventory (New) -->
+            <div id="page-inventory" class="page-content hidden">
+                <div class="flex justify-between items-center mb-6 border-b border-gray-800 pb-2">
+                    <h2 class="text-2xl font-bold">Inventário de Equipamentos</h2>
+                    <button onclick="openDeviceModal()"
+                        class="bg-neon-green hover:bg-green-500 text-black px-4 py-2 rounded text-sm font-bold shadow-[0_0_10px_rgba(57,255,20,0.3)] transition-all">
+                        + Novo Equipamento
+                    </button>
+                </div>
+                <div class="bg-gray-900 border border-gray-800 rounded overflow-hidden">
+                    <table class="w-full text-left text-sm text-gray-400">
+                        <thead class="bg-black text-xs uppercase font-bold text-gray-500">
+                            <tr>
+                                <th class="p-4">Nome</th>
+                                <th class="p-4">IP</th>
+                                <th class="p-4">Tipo</th>
+                                <th class="p-4">Ações</th>
+                            </tr>
+                        </thead>
+                        <tbody id="inventory-list-body" class="divide-y divide-gray-800">
+                            <!-- Dynamic Rows -->
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- Page: Backups -->
+            <div id="page-backups" class="page-content hidden">
+                <div class="flex justify-between items-center mb-6 border-b border-gray-800 pb-2">
+                    <h2 class="text-2xl font-bold">Gestão de Backups</h2>
+                    <div class="flex gap-2">
+                        <select id="backup-device-select"
+                            class="bg-gray-900 border border-gray-700 text-white text-xs rounded px-2 focus:outline-none">
+                            <option value="">Selecione Equipamento...</option>
+                        </select>
+                        <button onclick="triggerManualBackup()"
+                            class="bg-blue-600 hover:bg-blue-500 text-white px-4 py-2 rounded text-xs font-bold transition-all flex items-center gap-2">
+                            <span id="manual-backup-icon">💾</span> <span id="manual-backup-text">Fazer Backup
+                                Agora</span>
+                        </button>
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-1 lg:grid-cols-2 gap-8">
+                    <!-- Policy Config Card -->
+                    <div class="bg-gray-900 border border-gray-800 rounded-xl p-6 shadow-xl">
+                        <div class="flex items-center gap-2 mb-6">
+                            <span class="p-2 bg-blue-900/30 rounded text-blue-400">⚙️</span>
+                            <h3 class="text-lg font-bold">Política de Retenção</h3>
+                        </div>
+
+                        <form id="backup-config-form" class="space-y-6">
+                            <!-- 1. Frequência Diária -->
+                            <div>
+                                <label class="flex justify-between text-xs font-mono text-gray-500 mb-2 uppercase">
+                                    <span>Frequência de Backups</span>
+                                    <span id="val-per-day" class="text-blue-400 font-bold">4/dia</span>
+                                </label>
+                                <input type="range" id="b-per-day" min="1" max="24" value="4"
+                                    class="w-full accent-blue-500 h-1 bg-gray-800 rounded-lg appearance-none cursor-pointer">
+                            </div>
+
+                            <div class="h-px bg-gray-800"></div>
+
+                            <!-- 2. Retenção Semanal -->
+                            <div>
+                                <label class="flex justify-between text-xs font-mono text-gray-500 mb-2 uppercase">
+                                    <span>Após 1 Semana (Manter por dia)</span>
+                                    <span id="val-after-week" class="text-blue-400 font-bold">3/dia</span>
+                                </label>
+                                <input type="range" id="b-after-week" min="1" max="12" value="3"
+                                    class="w-full accent-blue-500 h-1 bg-gray-800 rounded-lg appearance-none cursor-pointer">
+                            </div>
+
+                            <!-- 3. Retenção Mensal -->
+                            <div>
+                                <label class="flex justify-between text-xs font-mono text-gray-500 mb-2 uppercase">
+                                    <span>Após 1 Mês (Manter por dia)</span>
+                                    <span id="val-after-month" class="text-blue-400 font-bold">1/dia</span>
+                                </label>
+                                <input type="range" id="b-after-month" min="1" max="6" value="1"
+                                    class="w-full accent-blue-500 h-1 bg-gray-800 rounded-lg appearance-none cursor-pointer">
+                            </div>
+
+                            <!-- 4. Retenção Anual -->
+                            <div>
+                                <label class="flex justify-between text-xs font-mono text-gray-500 mb-2 uppercase">
+                                    <span>Após 1 Ano (Manter por semana)</span>
+                                    <span id="val-after-year" class="text-blue-400 font-bold">1/sem</span>
+                                </label>
+                                <input type="range" id="b-after-year" min="1" max="16" value="1"
+                                    class="w-full accent-blue-500 h-1 bg-gray-800 rounded-lg appearance-none cursor-pointer">
+                            </div>
+
+                            <!-- 5. Retenção Longo Prazo (3 anos) -->
+                            <div>
+                                <label class="flex justify-between text-xs font-mono text-gray-500 mb-2 uppercase">
+                                    <span>Após 3 Anos (Manter por mês)</span>
+                                    <span id="val-after-three" class="text-blue-400 font-bold">2/mês</span>
+                                </label>
+                                <input type="range" id="b-after-three" min="1" max="16" value="2"
+                                    class="w-full accent-blue-500 h-1 bg-gray-800 rounded-lg appearance-none cursor-pointer">
+                            </div>
+
+                            <!-- Storage Estimation Preview -->
+                            <div class="bg-blue-900/10 border border-blue-900/30 p-4 rounded-lg">
+                                <div class="flex justify-between items-center mb-1">
+                                    <span class="text-xs font-bold text-blue-400 uppercase tracking-tighter">Estimativa
+                                        de Uso (1 Ano)</span>
+                                    <span id="storage-est" class="text-lg font-mono font-bold text-white">450 MB</span>
+                                </div>
+                                <p class="text-[10px] text-gray-500 italic leading-tight">
+                                    * Baseado em 1MB por arquivo. Valor aproximado sujeito à compressão e variação do
+                                    sistema.
+                                </p>
+                            </div>
+
+                            <button type="submit"
+                                class="w-full bg-blue-600 hover:bg-blue-500 text-white font-bold py-3 rounded-lg transition-all shadow-[0_0_20px_rgba(37,99,235,0.2)]">
+                                ATUALIZAR POLÍTICA
+                            </button>
+                        </form>
+                    </div>
+
+                    <!-- Status / Activity -->
+                    <div class="space-y-6">
+                        <div class="bg-gray-900 border border-gray-800 rounded-xl p-6">
+                            <h3 class="text-sm font-bold text-gray-400 uppercase mb-4">Resumo do Armazenamento</h3>
+                            <div class="flex items-center gap-4">
+                                <div class="flex-1">
+                                    <div class="flex justify-between text-xs mb-1">
+                                        <span class="text-gray-500">Espaço em Uso</span>
+                                        <span class="text-white">1.2 GB / 10 GB</span>
+                                    </div>
+                                    <div class="h-2 bg-gray-800 rounded-full overflow-hidden">
+                                        <div class="h-full bg-blue-500 w-[12%]"></div>
+                                    </div>
+                                </div>
+                                <div class="text-right">
+                                    <div class="text-xs text-gray-500">Backups Totais</div>
+                                    <div class="text-xl font-bold text-white">458</div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="bg-gray-900 border border-gray-800 rounded-xl p-6 flex-1 min-h-[400px]">
+                            <div
+                                class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-6">
+                                <h3 class="text-sm font-bold text-gray-400 uppercase whitespace-nowrap">Backups
+                                    Armazenados</h3>
+                                <div class="flex gap-2 w-full sm:w-auto">
+                                    <div class="relative flex-1 sm:flex-initial">
+                                        <input type="text" id="filter-backup-device"
+                                            placeholder="Filtrar Equipamento..."
+                                            class="w-full bg-black border border-gray-700 text-[10px] px-3 py-2 rounded focus:border-blue-500 focus:outline-none text-white sm:w-48"
+                                            autocomplete="off">
+                                        <!-- Suggestions Box -->
+                                        <div id="device-suggestions"
+                                            class="hidden absolute top-full left-0 w-full bg-gray-900 border border-gray-700 rounded-b shadow-2xl z-[60] max-h-48 overflow-y-auto mt-1">
+                                            <!-- Suggestions injected here -->
+                                        </div>
+                                    </div>
+                                    <input type="date" id="filter-backup-date"
+                                        class="bg-black border border-gray-700 text-[10px] px-3 py-2 rounded focus:border-blue-500 focus:outline-none text-white">
+                                </div>
+                            </div>
+                            <div class="overflow-x-auto">
+                                <table class="w-full text-left text-xs text-gray-400">
+                                    <thead class="bg-black text-[10px] uppercase font-bold text-gray-500">
+                                        <tr>
+                                            <th class="p-2">Equipamento</th>
+                                            <th class="p-2">Data / Hora</th>
+                                            <th class="p-2">Tamanho</th>
+                                            <th class="p-2 text-right">Ação</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="backup-list-body" class="divide-y divide-gray-800">
+                                        <!-- Dynamic Backup Rows -->
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Page: Logs -->
+            <div id="page-logs" class="page-content hidden">
+                <div class="flex justify-between items-center mb-6 border-b border-gray-800 pb-2">
+                    <h2 class="text-2xl font-bold">Logs do Servidor (Syslog)</h2>
+                    <div class="flex gap-2 text-xs items-center">
+                        <div class="w-2 h-2 rounded-full bg-green-500 animate-pulse"></div>
+                        <span class="text-gray-500">Servidor Ativo:</span>
+                        <span class="text-neon-green font-mono">UDP 1514</span>
+                    </div>
+                </div>
+
+                <div class="bg-gray-900 border border-gray-800 rounded-xl flex flex-col h-[70vh] shadow-2xl">
+                    <div class="p-4 border-b border-gray-800 flex justify-between items-center bg-black/20">
+                        <div class="flex gap-4">
+                            <input type="text" id="log-search" placeholder="Pesquisar log..."
+                                class="bg-black border border-gray-700 text-xs px-3 py-2 rounded w-64 focus:outline-none focus:border-orange-500 text-white">
+                            <select id="log-filter-device"
+                                class="bg-black border border-gray-700 text-xs px-3 py-2 rounded focus:outline-none text-white">
+                                <option value="">Todos os IPs</option>
+                            </select>
+                        </div>
+                        <div class="flex items-center gap-4 text-[10px] text-gray-500">
+                            <label class="flex items-center gap-2 cursor-pointer">
+                                <input type="checkbox" id="auto-scroll-logs" checked> Auto-Scroll
+                            </label>
+                            <button onclick="loadLogs()" class="hover:text-white">🔄 Recarregar</button>
+                        </div>
+                    </div>
+                    <div id="log-container"
+                        class="flex-1 overflow-auto p-4 font-mono text-[11px] space-y-1 bg-black/40 scrollbar-thin">
+                        <div class="text-gray-600 italic">Aguardando dados dos equipamentos...</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Page: Revenda (Super Admin) -->
+            <div id="page-revenda" class="page-content hidden">
+                <div class="flex justify-between items-center mb-6">
+                    <div>
+                        <h2 class="text-2xl font-bold text-yellow-500">Painel de Revenda</h2>
+                        <p class="text-xs text-gray-500 font-mono mt-1 uppercase">GESTOR DE LICENÇAS E NOVOS CLIENTES
+                        </p>
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                    <!-- Stats -->
+                    <div class="bg-gray-900 border border-gray-800 p-6 rounded-xl">
+                        <div class="text-gray-500 text-xs font-mono uppercase">Empresas Ativas</div>
+                        <div class="text-4xl font-bold text-white mt-2">1</div>
+                    </div>
+                    <div class="bg-gray-900 border border-gray-800 p-6 rounded-xl">
+                        <div class="text-gray-500 text-xs font-mono uppercase">Usuários Totais</div>
+                        <div class="text-4xl font-bold text-white mt-2">12</div>
+                    </div>
+                    <div class="bg-gray-900 border border-gray-800 p-6 rounded-xl">
+                        <div class="text-gray-500 text-xs font-mono uppercase">Faturamento Est.</div>
+                        <div class="text-4xl font-bold text-neon-green mt-2">R$ 0,00</div>
+                    </div>
+                </div>
+
+                <div class="mt-8 bg-gray-900 border border-gray-800 rounded-xl overflow-hidden">
+                    <div class="p-4 border-b border-gray-800 flex justify-between items-center">
+                        <h3 class="font-bold text-white">Gestão de Clientes / Empresas</h3>
+                        <button onclick="promptAddRevendaUser()"
+                            class="bg-yellow-600 hover:bg-yellow-500 text-black font-bold px-4 py-2 rounded text-xs transition-all">
+                            + Nova Empresa / Admin
+                        </button>
+                    </div>
+                    <table class="w-full text-left text-sm text-gray-400">
+                        <thead class="bg-black text-[10px] uppercase font-bold text-gray-500 border-b border-gray-800">
+                            <tr>
+                                <th class="p-4">Empresa / Admin</th>
+                                <th class="p-4">Domínio / IP</th>
+                                <th class="p-4">Plano</th>
+                                <th class="p-4">Status</th>
+                                <th class="p-4 text-right">Ações</th>
+                            </tr>
+                        </thead>
+                        <tbody id="revenda-list-body" class="divide-y divide-gray-800">
+                            <!-- Dynamic Content -->
+                            <tr>
+                                <td class="p-4">
+                                    <div class="font-bold text-white">MikroMon Original</div>
+                                    <div class="text-[10px] text-gray-500">admin@mikromon.internal</div>
+                                </td>
+                                <td class="p-4 font-mono text-xs">localhost</td>
+                                <td class="p-4"><span
+                                        class="px-2 py-0.5 bg-yellow-900/30 text-yellow-500 text-[10px] rounded font-bold uppercase">Enterprise</span>
+                                </td>
+                                <td class="p-4 text-neon-green text-xs font-bold">ATIVA</td>
+                                <td class="p-4 text-right">
+                                    <button class="text-blue-400 hover:underline text-xs">Configurar</button>
+                                </td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
         </main>
+    </div>
+
+    <!-- Modal: Change Password -->
+    <div id="change-password-modal"
+        class="fixed inset-0 z-[100] flex items-center justify-center bg-black/90 hidden backdrop-blur-sm">
+        <div class="bg-brand-gray w-full max-w-sm rounded-xl border border-gray-800 shadow-2xl p-6">
+            <h3 class="text-lg font-bold text-white mb-4">Alterar Senha</h3>
+            <div class="space-y-4">
+                <div>
+                    <label class="block text-[10px] text-gray-500 uppercase font-mono mb-1">Nova Senha</label>
+                    <input type="password" id="new-password-input"
+                        class="w-full bg-black border border-gray-700 p-2 text-white rounded focus:border-blue-500 outline-none">
+                </div>
+                <div>
+                    <label class="block text-[10px] text-gray-500 uppercase font-mono mb-1">Confirmar Senha</label>
+                    <input type="password" id="confirm-password-input"
+                        class="w-full bg-black border border-gray-700 p-2 text-white rounded focus:border-blue-500 outline-none">
+                </div>
+                <div class="flex gap-2">
+                    <button onclick="closeChangePasswordModal()"
+                        class="flex-1 bg-gray-800 text-white text-xs py-2 rounded">Cancelar</button>
+                    <button onclick="submitChangePassword()"
+                        class="flex-1 bg-blue-600 text-white text-xs py-2 rounded font-bold">Salvar</button>
+                </div>
+            </div>
+        </div>
     </div>
 
     <div id="terminal-modal" class="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-80 hidden">
@@ -243,6 +648,170 @@
         </div>
     </div>
 
+    <!-- Schedule Modal -->
+    <div id="schedule-modal"
+        class="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-90 hidden backdrop-blur-sm">
+        <div class="bg-brand-gray w-full max-w-xl rounded-xl border border-gray-800 shadow-2xl p-6 relative">
+            <button onclick="closeScheduleModal()"
+                class="absolute top-4 right-4 text-gray-500 hover:text-white">✕</button>
+            <h2 class="text-xl font-bold mb-6 text-white text-purple-400">Novo Agendamento</h2>
+            <form id="schedule-form" class="space-y-4">
+                <div>
+                    <label class="block text-xs font-mono text-gray-500 mb-1">NOME DA TAREFA</label>
+                    <input type="text" id="sched-title" required
+                        class="w-full bg-black border border-gray-700 p-2 text-white rounded focus:border-purple-500 focus:outline-none placeholder-gray-800"
+                        placeholder="Ex: Backup Meia Noite">
+                </div>
+                <div>
+                    <label class="block text-xs font-mono text-gray-500 mb-1">EQUIPAMENTO ALVO</label>
+                    <select id="sched-device" required
+                        class="w-full bg-black border border-gray-700 p-2 text-white rounded focus:border-purple-500 focus:outline-none">
+                        <!-- Dynamic Options -->
+                    </select>
+                </div>
+                <div>
+                    <label class="block text-xs font-mono text-gray-500 mb-1">SCRIPT / COMANDO CLI</label>
+                    <textarea id="sched-cmd" required
+                        class="w-full bg-black border border-gray-700 p-2 text-white rounded focus:border-purple-500 focus:outline-none placeholder-gray-800 h-24 font-mono text-sm"
+                        placeholder="/system backup save name=auto-sched"></textarea>
+                </div>
+                <div class="grid grid-cols-2 gap-4">
+                    <div>
+                        <label class="block text-xs font-mono text-gray-500 mb-1">DATA/HORA INICIAL</label>
+                        <input type="datetime-local" id="sched-at" required
+                            class="w-full bg-black border border-gray-700 p-2 text-white rounded focus:border-purple-500 focus:outline-none">
+                    </div>
+                    <div>
+                        <label class="block text-xs font-mono text-gray-500 mb-1">TIPO RECORRÊNCIA</label>
+                        <select id="sched-type"
+                            class="w-full bg-black border border-gray-700 p-2 text-white rounded focus:border-purple-500 focus:outline-none">
+                            <option value="single">Única Vez</option>
+                            <option value="recurring">Recorrente</option>
+                        </select>
+                    </div>
+                </div>
+                <div id="sched-recurrence-options" class="hidden grid grid-cols-2 gap-4 animate-fade-in">
+                    <div>
+                        <label class="block text-xs font-mono text-gray-500 mb-1">INTERVALO (EX: 24h)</label>
+                        <input type="text" id="sched-interval"
+                            class="w-full bg-black border border-gray-700 p-2 text-white rounded focus:border-purple-500 focus:outline-none"
+                            placeholder="24h, 1h, 168h...">
+                    </div>
+                    <div>
+                        <label class="block text-xs font-mono text-gray-500 mb-1">TERMINAR EM (OPCIONAL)</label>
+                        <input type="date" id="sched-until"
+                            class="w-full bg-black border border-gray-700 p-2 text-white rounded focus:border-purple-500 focus:outline-none">
+                    </div>
+                </div>
+                <button type="submit"
+                    class="w-full bg-purple-600 text-white font-bold py-3 mt-4 rounded hover:bg-purple-500 transition-all shadow-[0_0_15px_rgba(147,51,234,0.4)]">SALVAR
+                    AGENDAMENTO</button>
+            </form>
+        </div>
+    </div>
+
+    <!-- Command Modal -->
+    <div id="command-modal"
+        class="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-90 hidden backdrop-blur-sm">
+        <div class="bg-brand-gray w-full max-w-lg rounded-xl border border-gray-800 shadow-2xl p-6 relative">
+            <button onclick="closeCommandModal()"
+                class="absolute top-4 right-4 text-gray-500 hover:text-white">✕</button>
+            <h2 class="text-xl font-bold mb-6 text-white text-blue-400">Novo Comando Personalizado</h2>
+            <form id="command-form" class="space-y-4">
+                <div>
+                    <label class="block text-xs font-mono text-gray-500 mb-1">TÍTULO DO BOTÃO</label>
+                    <input type="text" id="cmd-title" required
+                        class="w-full bg-black border border-gray-700 p-2 text-white rounded focus:border-blue-500 focus:outline-none placeholder-gray-800"
+                        placeholder="Ex: Reiniciar Borda">
+                </div>
+                <div>
+                    <label class="block text-xs font-mono text-gray-500 mb-1">COMANDO CLI</label>
+                    <textarea id="cmd-raw" required
+                        class="w-full bg-black border border-gray-700 p-2 text-white rounded focus:border-blue-500 focus:outline-none placeholder-gray-800 h-24 font-mono text-sm"
+                        placeholder="/system reboot"></textarea>
+                </div>
+                <div class="grid grid-cols-2 gap-4">
+                    <div>
+                        <label class="block text-xs font-mono text-gray-500 mb-1">CATEGORIA</label>
+                        <select id="cmd-category"
+                            class="w-full bg-black border border-gray-700 p-2 text-white rounded focus:border-blue-500 focus:outline-none">
+                            <option value="OLT">01 - OLT</option>
+                            <option value="ROUTER">02 - Roteador</option>
+                            <option value="SWITCH">03 - Switch</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="block text-xs font-mono text-gray-500 mb-1">ÍCONE (EMOJI)</label>
+                        <input type="text" id="cmd-icon"
+                            class="w-full bg-black border border-gray-700 p-2 text-white rounded focus:border-blue-500 focus:outline-none text-center"
+                            placeholder="⚡">
+                    </div>
+                </div>
+                <div>
+                    <label class="block text-xs font-mono text-gray-500 mb-1">BREVE DESCRIÇÃO</label>
+                    <input type="text" id="cmd-desc"
+                        class="w-full bg-black border border-gray-700 p-2 text-white rounded focus:border-blue-500 focus:outline-none placeholder-gray-800"
+                        placeholder="O que este botão faz?">
+                </div>
+                <button type="submit"
+                    class="w-full bg-blue-600 text-white font-bold py-3 mt-4 rounded hover:bg-blue-500 transition-all shadow-[0_0_15px_rgba(37,99,235,0.4)]">SALVAR
+                    COMANDO</button>
+            </form>
+        </div>
+    </div>
+
+    <!-- Device Modal -->
+    <div id="device-modal"
+        class="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-90 hidden backdrop-blur-sm">
+        <div class="bg-brand-gray w-full max-w-lg rounded-xl border border-gray-800 shadow-2xl p-6 relative">
+            <button onclick="closeDeviceModal()"
+                class="absolute top-4 right-4 text-gray-500 hover:text-white">✕</button>
+            <h2 class="text-xl font-bold mb-6 text-white text-neon-green">Cadastrar Equipamento</h2>
+            <form id="device-form" class="space-y-4">
+                <div>
+                    <label class="block text-xs font-mono text-gray-500 mb-1">NOME IDENTIFICADOR</label>
+                    <input type="text" id="dev-name" required
+                        class="w-full bg-black border border-gray-700 p-2 text-white rounded focus:border-neon-green focus:outline-none placeholder-gray-800"
+                        placeholder="Ex: OLT-Centro">
+                </div>
+                <div class="grid grid-cols-2 gap-4">
+                    <div>
+                        <label class="block text-xs font-mono text-gray-500 mb-1">ENDEREÇO IP</label>
+                        <input type="text" id="dev-ip" required
+                            class="w-full bg-black border border-gray-700 p-2 text-white rounded focus:border-neon-green focus:outline-none placeholder-gray-800"
+                            placeholder="192.168.88.1">
+                    </div>
+                    <div>
+                        <label class="block text-xs font-mono text-gray-500 mb-1">TIPO</label>
+                        <select id="dev-type"
+                            class="w-full bg-black border border-gray-700 p-2 text-white rounded focus:border-neon-green focus:outline-none">
+                            <option value="OLT">01 - OLT</option>
+                            <option value="ROUTER">02 - Roteador</option>
+                            <option value="SWITCH">03 - Switch</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="grid grid-cols-2 gap-4">
+                    <div>
+                        <label class="block text-xs font-mono text-gray-500 mb-1">USUÁRIO SSH</label>
+                        <input type="text" id="dev-user"
+                            class="w-full bg-black border border-gray-700 p-2 text-white rounded focus:border-neon-green focus:outline-none placeholder-gray-800"
+                            placeholder="admin">
+                    </div>
+                    <div>
+                        <label class="block text-xs font-mono text-gray-500 mb-1">SENHA SSH</label>
+                        <input type="password" id="dev-pass"
+                            class="w-full bg-black border border-gray-700 p-2 text-white rounded focus:border-neon-green focus:outline-none placeholder-gray-800"
+                            placeholder="••••">
+                    </div>
+                </div>
+                <button type="submit"
+                    class="w-full bg-neon-green text-black font-bold py-3 mt-4 rounded hover:bg-green-500 transition-all">SALVAR
+                    EQUIPAMENTO</button>
+            </form>
+        </div>
+    </div>
+
     <script>
         const API_BASE = '/api/v1';
 
@@ -251,10 +820,363 @@
             document.querySelectorAll('.page-content').forEach(el => el.classList.add('hidden'));
             document.getElementById('page-' + pageId).classList.remove('hidden');
             if (pageId === 'olt' || pageId === 'router' || pageId === 'switch') loadDevices(pageId);
-            if (pageId === 'automation') loadCommands();
+            if (pageId === 'automation') switchAutoTab('commands');
             if (pageId === 'team') loadUsers();
             if (pageId === 'tech') loadTechDashboard();
+            if (pageId === 'inventory') loadInventory();
+            if (pageId === 'backups') {
+                loadBackupConfig();
+                loadBackups();
+                loadBackupDeviceSelect();
+            }
+            if (pageId === 'logs') {
+                loadLogs();
+                startLogPolling();
+            } else {
+                stopLogPolling();
+            }
         }
+
+        let logPollingInterval = null;
+        function startLogPolling() {
+            if (logPollingInterval) return;
+            logPollingInterval = setInterval(loadLogs, 2000);
+        }
+        function stopLogPolling() {
+            clearInterval(logPollingInterval);
+            logPollingInterval = null;
+        }
+
+        async function loadLogs() {
+            const token = localStorage.getItem('token');
+            try {
+                const res = await fetch(`${API_BASE}/logs`, { headers: { 'Authorization': 'Bearer ' + token } });
+                const logs = await res.json();
+                renderLogs(logs);
+            } catch (e) { console.error(e); }
+        }
+
+        function renderLogs(logs) {
+            if (!logs) logs = [];
+            const container = document.getElementById('log-container');
+            const searchInput = document.getElementById('log-search');
+            if (!container || !searchInput) return;
+
+            const search = searchInput.value.toLowerCase();
+            const deviceFilter = document.getElementById('log-filter-device').value;
+            const autoScroll = document.getElementById('auto-scroll-logs').checked;
+
+            const filtered = logs.filter(l => {
+                const matchesSearch = (l.message || "").toLowerCase().includes(search) || (l.device_ip || "").includes(search);
+                const matchesDevice = !deviceFilter || l.device_ip === deviceFilter;
+                return matchesSearch && matchesDevice;
+            });
+
+            // Update Device Filter Options if needed
+            const select = document.getElementById('log-filter-device');
+            if (select) {
+                const currentDevices = [...new Set(logs.map(l => l.device_ip))];
+                if (select.options.length <= 1 && currentDevices.length > 0) {
+                    currentDevices.forEach(ip => {
+                        const opt = document.createElement('option');
+                        opt.value = ip;
+                        opt.textContent = ip;
+                        select.appendChild(opt);
+                    });
+                }
+            }
+
+            container.innerHTML = filtered.map(l => {
+                const timeStr = new Date(l.timestamp).toLocaleTimeString('pt-BR');
+                return `<div class="flex gap-3 hover:bg-white/5 p-0.5 rounded transition-colors border-l-2 border-transparent hover:border-orange-500">
+                    <span class="text-gray-600 min-w-[70px]">${timeStr}</span>
+                    <span class="text-blue-400 min-w-[100px]">${l.device_ip}</span>
+                    <span class="text-gray-300 break-all">${l.message}</span>
+                </div>`;
+            }).join('');
+
+            if (autoScroll) {
+                container.scrollTop = container.scrollHeight;
+            }
+        }
+        async function loadBackupDeviceSelect() {
+            const token = localStorage.getItem('token');
+            try {
+                const res = await fetch(`${API_BASE}/devices`, { headers: { 'Authorization': 'Bearer ' + token } });
+                const devices = await res.json();
+                const select = document.getElementById('backup-device-select');
+                if (!select) return;
+                select.innerHTML = '<option value="">Selecione Equipamento...</option>';
+                devices.forEach(d => {
+                    const opt = document.createElement('option');
+                    opt.value = d.id;
+                    opt.textContent = `${d.name} (${d.ip})`;
+                    select.appendChild(opt);
+                });
+            } catch (e) { console.error(e); }
+        }
+
+        let allBackups = [];
+
+        async function loadBackups() {
+            const token = localStorage.getItem('token');
+            try {
+                const res = await fetch(`${API_BASE}/backups`, { headers: { 'Authorization': 'Bearer ' + token } });
+                allBackups = await res.json();
+                renderBackupsTable(allBackups);
+            } catch (e) { console.error(e); }
+        }
+
+        function renderBackupsTable(backups) {
+            const body = document.getElementById('backup-list-body');
+            const deviceFilter = document.getElementById('filter-backup-device').value.toLowerCase();
+            const dateFilter = document.getElementById('filter-backup-date').value;
+
+            body.innerHTML = '';
+
+            const filtered = backups.filter(b => {
+                const matchesDevice = b.device_name.toLowerCase().includes(deviceFilter);
+                // CreatedAt is "YYYY-MM-DD HH:mm", filter is "YYYY-MM-DD"
+                const matchesDate = !dateFilter || b.created_at.startsWith(dateFilter);
+                return matchesDevice && matchesDate;
+            });
+
+            filtered.forEach(b => {
+                // Format date to DD/MM/AAAA HH:mm
+                let formattedDate = b.created_at;
+                if (b.created_at !== "Recentemente") {
+                    const [datePart, timePart] = b.created_at.split(' ');
+                    const [y, m, d] = datePart.split('-');
+                    formattedDate = `${d}/${m}/${y} ${timePart || ''}`;
+                }
+
+                const row = document.createElement('tr');
+                row.className = "hover:bg-black/50 transition-colors";
+                row.innerHTML = `
+                    <td class="p-2 font-bold text-white">${b.device_name}</td>
+                    <td class="p-2 text-gray-400 font-mono text-[10px]">${formattedDate}</td>
+                    <td class="p-2"><span class="bg-gray-800 px-1 rounded text-[10px]">${b.size}</span></td>
+                    <td class="p-2 text-right">
+                        <button onclick="downloadBackup('${b.filename}')" class="text-blue-400 hover:text-white transition-colors" title="Download">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 inline" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a2 2 0 002 2h12a2 2 0 002-2v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                            </svg>
+                        </button>
+                    </td>
+                `;
+                body.appendChild(row);
+            });
+        }
+
+        // Add Event Listeners for filters
+        const deviceInput = document.getElementById('filter-backup-device');
+        const suggestionsBox = document.getElementById('device-suggestions');
+
+        deviceInput?.addEventListener('input', () => {
+            renderBackupsTable(allBackups);
+            updateDeviceSuggestions();
+        });
+
+        deviceInput?.addEventListener('focus', () => {
+            updateDeviceSuggestions();
+            suggestionsBox.classList.remove('hidden');
+        });
+
+        // Hide suggestions when clicking outside
+        document.addEventListener('click', (e) => {
+            if (!deviceInput.contains(e.target) && !suggestionsBox.contains(e.target)) {
+                suggestionsBox.classList.add('hidden');
+            }
+        });
+
+        function updateDeviceSuggestions() {
+            const query = deviceInput.value.toLowerCase();
+            const uniqueDevices = [...new Set(allBackups.map(b => b.device_name))];
+            const filtered = uniqueDevices.filter(d => d.toLowerCase().includes(query));
+
+            suggestionsBox.innerHTML = '';
+            if (filtered.length === 0) {
+                suggestionsBox.classList.add('hidden');
+                return;
+            }
+
+            suggestionsBox.classList.remove('hidden');
+            filtered.forEach(dev => {
+                const item = document.createElement('div');
+                item.className = "p-2 hover:bg-blue-900/40 cursor-pointer text-[10px] text-gray-300 hover:text-white border-b border-gray-800 last:border-0";
+                item.innerText = dev;
+                item.onclick = () => {
+                    deviceInput.value = dev;
+                    suggestionsBox.classList.add('hidden');
+                    renderBackupsTable(allBackups);
+                };
+                suggestionsBox.appendChild(item);
+            });
+        }
+
+        document.getElementById('filter-backup-date')?.addEventListener('change', () => renderBackupsTable(allBackups));
+
+        function downloadBackup(filename) {
+            // Mock download
+            alert('Iniciando download de: ' + filename);
+            // In real app: window.open(`${API_BASE}/backups/download?file=${filename}`);
+        }
+
+        async function triggerManualBackup() {
+            const deviceId = document.getElementById('backup-device-select').value;
+            if (!deviceId) {
+                alert('Selecione um equipamento para o backup manual.');
+                return;
+            }
+
+            const icon = document.getElementById('manual-backup-icon');
+            const text = document.getElementById('manual-backup-text');
+            const originalIcon = icon.innerText;
+            const originalText = text.innerText;
+
+            icon.innerText = '⚙️';
+            icon.classList.add('animate-spin');
+            text.innerText = 'Processando...';
+
+            const token = localStorage.getItem('token');
+            try {
+                const res = await fetch(`${API_BASE}/backups/manual`, {
+                    method: 'POST',
+                    headers: { 'Authorization': 'Bearer ' + token, 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ device_id: deviceId })
+                });
+                if (res.ok) {
+                    alert('Backup concluído com sucesso!');
+                    loadBackups();
+                } else {
+                    alert('Erro ao realizar backup.');
+                }
+            } catch (e) { console.error(e); } finally {
+                icon.innerText = originalIcon;
+                icon.classList.remove('animate-spin');
+                text.innerText = originalText;
+            }
+        }
+
+        // Backup Logic
+        async function loadBackupConfig() {
+            const token = localStorage.getItem('token');
+            try {
+                const res = await fetch(`${API_BASE}/backups/config`, { headers: { 'Authorization': 'Bearer ' + token } });
+                const config = await res.json();
+
+                const r = config.retention;
+                document.getElementById('b-per-day').value = r.backups_per_day;
+                document.getElementById('val-per-day').innerText = `${r.backups_per_day}/dia`;
+
+                document.getElementById('b-after-week').value = r.after_week;
+                document.getElementById('val-after-week').innerText = `${r.after_week}/dia`;
+
+                document.getElementById('b-after-month').value = r.after_month;
+                document.getElementById('val-after-month').innerText = `${r.after_month}/dia`;
+
+                document.getElementById('b-after-year').value = r.after_year;
+                document.getElementById('val-after-year').innerText = `${r.after_year}/sem`;
+
+                document.getElementById('b-after-three').value = r.after_three;
+                document.getElementById('val-after-three').innerText = `${r.after_three}/mês`;
+
+            } catch (e) { console.error(e); }
+        }
+
+        // Dynamic Label Updates for Ranges
+        ['b-per-day', 'b-after-week', 'b-after-month', 'b-after-year', 'b-after-three'].forEach(id => {
+            const input = document.getElementById(id);
+            if (!input) return;
+            input.addEventListener('input', (e) => {
+                const suffix = id === 'b-after-year' ? '/sem' : id === 'b-after-three' ? '/mês' : '/dia';
+                document.getElementById('val-' + id.substring(2)).innerText = e.target.value + suffix;
+            });
+        });
+
+        document.getElementById('backup-config-form').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const token = localStorage.getItem('token');
+            const config = {
+                enabled: true,
+                retention: {
+                    backups_per_day: parseInt(document.getElementById('b-per-day').value),
+                    after_week: parseInt(document.getElementById('b-after-week').value),
+                    after_month: parseInt(document.getElementById('b-after-month').value),
+                    after_year: parseInt(document.getElementById('b-after-year').value),
+                    after_three: parseInt(document.getElementById('b-after-three').value)
+                }
+            };
+
+            try {
+                const res = await fetch(`${API_BASE}/backups/config`, {
+                    method: 'POST',
+                    headers: { 'Authorization': 'Bearer ' + token, 'Content-Type': 'application/json' },
+                    body: JSON.stringify(config)
+                });
+                if (res.ok) alert('Configurações de Backup atualizadas!');
+            } catch (e) { console.error(e); }
+        });
+
+        // Inventory Logic
+        async function loadInventory() {
+            const token = localStorage.getItem('token');
+            const tbody = document.getElementById('inventory-list-body');
+            tbody.innerHTML = '<tr><td colspan="4" class="p-4 text-center">Carregando...</td></tr>';
+
+            try {
+                const res = await fetch(`${API_BASE}/devices`, { headers: { 'Authorization': 'Bearer ' + token } });
+                const devices = await res.json();
+                tbody.innerHTML = '';
+
+                devices.forEach(d => {
+                    const row = `
+                        <tr class="hover:bg-gray-800 transition-colors">
+                            <td class="p-4 font-bold text-white flex items-center gap-2">
+                                <span class="text-xs ${d.type === 'OLT' ? 'text-neon-green' : d.type === 'ROUTER' ? 'text-blue-400' : 'text-purple-400'}">●</span> ${d.name}
+                            </td>
+                            <td class="p-4 font-mono text-xs">${d.ip}</td>
+                            <td class="p-4"><span class="bg-gray-800 px-2 py-1 rounded text-xs font-mono border border-gray-700">${d.type}</span></td>
+                            <td class="p-4">
+                                <button class="text-red-500 hover:text-red-400 text-xs" onclick="alert('Funcionalidade de exclusão pendente')">Remover</button>
+                            </td>
+                        </tr>
+                     `;
+                    tbody.innerHTML += row;
+                });
+            } catch (e) { console.error(e); }
+        }
+
+        function openDeviceModal() { document.getElementById('device-modal').classList.remove('hidden'); }
+        function closeDeviceModal() { document.getElementById('device-modal').classList.add('hidden'); }
+
+        document.getElementById('device-form').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            console.log("Submitting form..."); // DEBUG
+            const name = document.getElementById('dev-name').value;
+            const ip = document.getElementById('dev-ip').value;
+            const type = document.getElementById('dev-type').value;
+            const user = document.getElementById('dev-user').value;
+            const pass = document.getElementById('dev-pass').value;
+
+            const token = localStorage.getItem('token');
+            try {
+                const res = await fetch(`${API_BASE}/devices`, {
+                    method: 'POST',
+                    headers: { 'Authorization': 'Bearer ' + token, 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ name, ip, type, username: user, password: pass, port: 22 })
+                });
+                if (res.ok) {
+                    closeDeviceModal();
+                    loadInventory();
+                    // Optional: Reset form
+                    document.getElementById('device-form').reset();
+                    alert('Equipamento cadastrado!');
+                } else {
+                    alert('Erro ao cadastrar');
+                }
+            } catch (e) { console.error(e); }
+        });
 
         async function loadUsers() {
             const token = localStorage.getItem('token');
@@ -293,6 +1215,147 @@
                 body: JSON.stringify({ full_name: name, username: username, role: role })
             });
             loadUsers();
+        }
+
+        function switchAutoTab(tab) {
+            const cmdTab = document.getElementById('tab-content-commands');
+            const schedTab = document.getElementById('tab-content-schedules');
+            if (!cmdTab || !schedTab) return;
+
+            cmdTab.classList.toggle('hidden', tab !== 'commands');
+            schedTab.classList.toggle('hidden', tab !== 'schedules');
+
+            document.getElementById('tab-btn-commands').className = tab === 'commands' ?
+                'pb-3 border-b-2 border-neon-green text-neon-green font-bold text-sm transition-all focus:outline-none uppercase' :
+                'pb-3 border-b-2 border-transparent text-gray-500 hover:text-white font-bold text-sm transition-all focus:outline-none uppercase';
+
+            document.getElementById('tab-btn-schedules').className = tab === 'schedules' ?
+                'pb-3 border-b-2 border-neon-green text-neon-green font-bold text-sm transition-all focus:outline-none uppercase' :
+                'pb-3 border-b-2 border-transparent text-gray-500 hover:text-white font-bold text-sm transition-all focus:outline-none uppercase';
+
+            const addBtn = document.querySelector('#auto-header-actions button');
+            if (tab === 'commands') {
+                addBtn.innerText = '+ NOVO COMANDO';
+                addBtn.onclick = openCommandModal;
+                loadCommands();
+            } else {
+                addBtn.innerText = '+ NOVO AGENDAMENTO';
+                addBtn.onclick = openScheduleModal;
+                loadSchedules();
+            }
+        }
+
+        async function loadSchedules() {
+            const token = localStorage.getItem('token');
+            try {
+                const res = await fetch(`${API_BASE}/schedules`, { headers: { 'Authorization': 'Bearer ' + token } });
+                const schedules = await res.json();
+                const body = document.getElementById('schedule-list-body');
+                body.innerHTML = '';
+                schedules.forEach(s => {
+                    const row = document.createElement('tr');
+                    const recur = s.type === 'recurring' ? `A cada ${s.interval}` : 'Única vez';
+                    const resultBtn = s.result ?
+                        `<button onclick="viewScheduleResult('${s.id}')" class="text-neon-green hover:underline text-xs mr-3">Ver Resultado</button>` :
+                        `<span class="text-gray-600 text-[10px] mr-3 italic">Sem resultado</span>`;
+
+                    row.innerHTML = `
+                        <td class="p-4"><div class="font-bold text-white">${s.title}</div><div class="text-[10px] text-gray-500 font-mono italic">${s.command}</div></td>
+                        <td class="p-4 text-xs font-mono">${s.device_name}</td>
+                        <td class="p-4 text-xs">${new Date(s.run_at).toLocaleString('pt-BR')}</td>
+                        <td class="p-4 text-xs">${recur}</td>
+                        <td class="p-4"><span class="px-2 py-1 bg-blue-900/30 text-blue-400 text-[10px] rounded uppercase font-bold">${s.status}</span></td>
+                        <td class="p-4 text-right">
+                            ${resultBtn}
+                            <button onclick="deleteSchedule('${s.id}')" class="text-red-500 hover:text-red-400 text-xs text-opacity-50">Excluir</button>
+                        </td>
+                    `;
+                    body.appendChild(row);
+                });
+            } catch (e) { console.error(e); }
+        }
+
+        function openScheduleModal() {
+            document.getElementById('schedule-modal').classList.remove('hidden');
+            loadScheduleDeviceOptions();
+        }
+        function closeScheduleModal() { document.getElementById('schedule-modal').classList.add('hidden'); }
+
+        async function loadScheduleDeviceOptions() {
+            const token = localStorage.getItem('token');
+            const res = await fetch(`${API_BASE}/devices`, { headers: { 'Authorization': 'Bearer ' + token } });
+            const devices = await res.json();
+            const select = document.getElementById('sched-device');
+            select.innerHTML = '<option value="">Selecione...</option>';
+            devices.forEach(d => {
+                const opt = document.createElement('option');
+                opt.value = d.id;
+                opt.dataset.name = d.name;
+                opt.textContent = `${d.name} (${d.ip})`;
+                select.appendChild(opt);
+            });
+        }
+
+        document.getElementById('sched-type')?.addEventListener('change', (e) => {
+            document.getElementById('sched-recurrence-options').classList.toggle('hidden', e.target.value !== 'recurring');
+        });
+
+        document.getElementById('schedule-form')?.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const deviceSelect = document.getElementById('sched-device');
+            const payload = {
+                title: document.getElementById('sched-title').value,
+                command: document.getElementById('sched-cmd').value,
+                device_id: deviceSelect.value,
+                device_name: deviceSelect.options[deviceSelect.selectedIndex].dataset.name,
+                run_at: document.getElementById('sched-at').value,
+                type: document.getElementById('sched-type').value,
+                interval: document.getElementById('sched-interval').value,
+                until: document.getElementById('sched-until').value
+            };
+
+            const token = localStorage.getItem('token');
+            try {
+                const res = await fetch(`${API_BASE}/schedules`, {
+                    method: 'POST',
+                    headers: { 'Authorization': 'Bearer ' + token, 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+                if (res.ok) {
+                    closeScheduleModal();
+                    loadSchedules();
+                    document.getElementById('schedule-form').reset();
+                }
+            } catch (e) { console.error(e); }
+        });
+
+        async function deleteSchedule(id) {
+            if (!confirm('Deseja excluir este agendamento?')) return;
+            const token = localStorage.getItem('token');
+            await fetch(`${API_BASE}/schedules?id=${id}`, {
+                method: 'DELETE',
+                headers: { 'Authorization': 'Bearer ' + token }
+            });
+            loadSchedules();
+        }
+
+        async function viewScheduleResult(id) {
+            const token = localStorage.getItem('token');
+            const res = await fetch(`${API_BASE}/schedules`, { headers: { 'Authorization': 'Bearer ' + token } });
+            const schedules = await res.json();
+            const sched = schedules.find(s => s.id === id);
+
+            if (sched && sched.result) {
+                document.getElementById('terminal-modal').classList.remove('hidden');
+                document.getElementById('term-title').innerText = `Agendamento: ${sched.title} (${sched.device_name})`;
+                document.getElementById('term-output').innerHTML = `
+<span class="text-blue-400 font-bold">[Comando Executado]</span>
+<span class="text-white">${sched.command}</span>
+
+<span class="text-purple-400 font-bold">[Saída Capturada - ${new Date(sched.run_at).toLocaleString('pt-BR')}]</span>
+${sched.result}
+                `;
+            }
         }
 
         async function loadTechDashboard() {
@@ -358,6 +1421,92 @@
                 if (type === 'switch') renderSwitch(devices);
             } catch (e) { console.error(e); }
         }
+
+        // Backup Logic
+        async function loadBackupConfig() {
+            const token = localStorage.getItem('token');
+            try {
+                const res = await fetch(`${API_BASE}/backups/config`, { headers: { 'Authorization': 'Bearer ' + token } });
+                const config = await res.json();
+
+                const r = config.retention;
+                document.getElementById('b-per-day').value = r.backups_per_day;
+                document.getElementById('val-per-day').innerText = `${r.backups_per_day}/dia`;
+
+                document.getElementById('b-after-week').value = r.after_week;
+                document.getElementById('val-after-week').innerText = `${r.after_week}/dia`;
+
+                document.getElementById('b-after-month').value = r.after_month;
+                document.getElementById('val-after-month').innerText = `${r.after_month}/dia`;
+
+                document.getElementById('b-after-year').value = r.after_year;
+                document.getElementById('val-after-year').innerText = `${r.after_year}/sem`;
+
+                document.getElementById('b-after-three').value = r.after_three;
+                document.getElementById('val-after-three').innerText = `${r.after_three}/mês`;
+
+            } catch (e) { console.error(e); }
+        }
+
+        // Dynamic Label Updates for Ranges
+        document.addEventListener('input', (e) => {
+            if (e.target.id && e.target.id.startsWith('b-')) {
+                const id = e.target.id;
+                const suffix = id === 'b-after-year' ? '/sem' : id === 'b-after-three' ? '/mês' : '/dia';
+                const label = document.getElementById('val-' + id.substring(2));
+                if (label) label.innerText = e.target.value + suffix;
+                updateStorageEst();
+            }
+        });
+
+        function updateStorageEst() {
+            const perDayInput = document.getElementById('b-per-day');
+            const afterWeekInput = document.getElementById('b-after-week');
+            const afterMonthInput = document.getElementById('b-after-month');
+            if (!perDayInput || !afterWeekInput || !afterMonthInput) return;
+
+            const perDay = parseInt(perDayInput.value);
+            const afterWeek = parseInt(afterWeekInput.value);
+            const afterMonth = parseInt(afterMonthInput.value);
+
+            // Logic for 1 Year estimation: 
+            // Week 1: perDay * 7
+            // Rest of Month 1 (approx 23 days): afterWeek * 23
+            // Months 2-12 (approx 335 days): afterMonth * 335
+            const totalBackups = (perDay * 7) + (afterWeek * 23) + (afterMonth * 335);
+            const sizeMB = totalBackups; // 1MB per backup
+
+            const display = sizeMB > 1024 ? (sizeMB / 1024).toFixed(2) + ' GB' : sizeMB + ' MB';
+            const estEl = document.getElementById('storage-est');
+            if (estEl) estEl.innerText = display;
+        }
+
+        // Call once on load
+        setTimeout(updateStorageEst, 500);
+
+        document.getElementById('backup-config-form')?.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const token = localStorage.getItem('token');
+            const config = {
+                enabled: true,
+                retention: {
+                    backups_per_day: parseInt(document.getElementById('b-per-day').value),
+                    after_week: parseInt(document.getElementById('b-after-week').value),
+                    after_month: parseInt(document.getElementById('b-after-month').value),
+                    after_year: parseInt(document.getElementById('b-after-year').value),
+                    after_three: parseInt(document.getElementById('b-after-three').value)
+                }
+            };
+
+            try {
+                const res = await fetch(`${API_BASE}/backups/config`, {
+                    method: 'POST',
+                    headers: { 'Authorization': 'Bearer ' + token, 'Content-Type': 'application/json' },
+                    body: JSON.stringify(config)
+                });
+                if (res.ok) alert('Configurações de Backup atualizadas!');
+            } catch (e) { console.error(e); }
+        });
 
         function renderSwitch(devices) {
             const container = document.getElementById('switch-container');
@@ -454,49 +1603,141 @@
             });
         }
 
+        let selectedAutomationDevice = null;
+
         async function loadCommands() {
             const token = localStorage.getItem('token');
             if (!token) return;
 
             try {
-                const res = await fetch(`${API_BASE}/commands`, {
-                    headers: { 'Authorization': 'Bearer ' + token }
-                });
-                const commands = await res.json();
+                const [cmdRes, devRes] = await Promise.all([
+                    fetch(`${API_BASE}/commands`, { headers: { 'Authorization': 'Bearer ' + token } }),
+                    fetch(`${API_BASE}/devices`, { headers: { 'Authorization': 'Bearer ' + token } })
+                ]);
 
-                // Render List
-                const container = document.getElementById('page-automation');
-                // Clear previous content but keep header
-                const header = container.querySelector('h2');
-                container.innerHTML = '';
-                container.appendChild(header);
+                const commands = await cmdRes.json();
+                const devices = await devRes.json();
 
-                const grid = document.createElement('div');
-                grid.className = "grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4";
-
-                if (commands && commands.length > 0) {
-                    commands.forEach(cmd => {
-                        const card = document.createElement('div');
-                        card.className = "bg-gray-900 border border-gray-800 p-4 rounded hover:border-blue-500 transition-colors cursor-pointer group";
-                        card.innerHTML = `
-                            <div class="flex justify-between items-start">
-                                <h3 class="font-bold text-white group-hover:text-blue-400">${cmd.title}</h3>
-                                <span class="bg-gray-800 text-xs px-2 py-1 rounded text-gray-400">${cmd.category}</span>
-                            </div>
-                            <code class="block mt-2 text-xs text-gray-500 font-mono bg-black p-2 rounded truncate">${cmd.command}</code>
-                            <p class="text-xs text-gray-600 mt-2">${cmd.description}</p>
-                        `;
-                        // For prototype, clicking just logs or could open a generic terminal
-                        card.onclick = () => alert(`Command selected: ${cmd.title}`);
-                        grid.appendChild(card);
-                    });
-                } else {
-                    grid.innerHTML = '<p class="text-gray-500">Sem comandos personalizados.</p>';
-                }
-                container.appendChild(grid);
-
+                renderAutomationSelector(devices, commands);
             } catch (e) { console.error(e); }
         }
+
+        function renderAutomationSelector(devices, allCommands) {
+            const selector = document.getElementById('automation-device-selector');
+            selector.innerHTML = '';
+
+            devices.forEach(dev => {
+                const pill = document.createElement('div');
+                pill.className = `flex-shrink-0 cursor-pointer p-4 rounded-xl border-2 transition-all flex flex-col items-center gap-1 w-32 ${selectedAutomationDevice?.id === dev.id ? 'border-neon-green bg-gray-900 shadow-[0_0_15px_rgba(57,255,20,0.1)]' : 'border-gray-800 bg-brand-gray hover:border-gray-600'}`;
+
+                pill.onclick = () => {
+                    selectedAutomationDevice = dev;
+                    renderAutomationSelector(devices, allCommands); // Re-render pills to show selection
+                    renderCommandButtons(dev, allCommands);
+                };
+
+                const icon = dev.type === 'OLT' ? '📡' : dev.type === 'ROUTER' ? '🔌' : '🖧';
+                pill.innerHTML = `
+                    <span class="text-2xl">${icon}</span>
+                    <span class="text-xs font-bold text-white truncate w-full text-center">${dev.name}</span>
+                    <span class="text-[10px] text-gray-500 font-mono">${dev.ip}</span>
+                `;
+                selector.appendChild(pill);
+            });
+
+            if (selectedAutomationDevice) {
+                renderCommandButtons(selectedAutomationDevice, allCommands);
+            }
+        }
+
+        function renderCommandButtons(device, allCommands) {
+            const container = document.getElementById('automation-commands-container');
+            const placeholder = document.getElementById('automation-no-device');
+            const grid = document.getElementById('commands-grid');
+
+            container.classList.remove('hidden');
+            placeholder.classList.add('hidden');
+            grid.innerHTML = '';
+
+            // Filter commands by device category
+            const filtered = allCommands.filter(c => c.category === device.type);
+
+            if (filtered.length === 0) {
+                grid.innerHTML = `<div class="col-span-full py-10 text-center text-gray-500">Nenhum comando específico para ${device.type} encontrado.</div>`;
+                return;
+            }
+
+            filtered.forEach(cmd => {
+                const btn = document.createElement('div');
+                // Format as a modern big action button
+                btn.className = "group relative bg-gray-900 border border-gray-800 rounded-xl p-6 flex flex-col items-center justify-center gap-4 hover:border-neon-green hover:bg-black transition-all cursor-pointer aspect-square text-center shadow-lg active:scale-95";
+
+                btn.innerHTML = `
+                    <!-- Info Icon Top Right -->
+                    <div class="absolute top-2 right-2 text-gray-600 hover:text-blue-400 p-1" onclick="event.stopPropagation(); alert('Comando CLI:\\n${cmd.command}')">
+                         <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                         </svg>
+                    </div>
+
+                    <!-- Main Icon -->
+                    <div class="text-4xl group-hover:scale-110 transition-transform">${cmd.icon || '⚡'}</div>
+                    
+                    <div>
+                        <div class="text-sm font-bold text-white group-hover:text-neon-green">${cmd.title}</div>
+                        <div class="text-[10px] text-gray-500 mt-1 uppercase tracking-tighter">${cmd.description}</div>
+                    </div>
+
+                    <!-- Actions Layer (Hover) -->
+                    <div class="absolute inset-0 bg-neon-green opacity-0 group-hover:opacity-10 transition-opacity rounded-xl pointer-events-none"></div>
+                    
+                    <!-- Run Overlay -->
+                    <div class="absolute bottom-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                         <div class="bg-neon-green p-2 rounded-full text-black shadow-xl" onclick="event.stopPropagation(); executeAutomationCommand('${cmd.id}', '${cmd.title}', '${cmd.command}')">
+                             <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" />
+                             </svg>
+                         </div>
+                    </div>
+                `;
+
+                // Click main body to execute
+                btn.onclick = () => executeAutomationCommand(cmd.id, cmd.title, cmd.command);
+                grid.appendChild(btn);
+            });
+        }
+
+        function executeAutomationCommand(cmdId, title, rawCmd) {
+            if (!selectedAutomationDevice) return;
+            openTerminal(selectedAutomationDevice, rawCmd);
+        }
+
+        function openCommandModal() { document.getElementById('command-modal').classList.remove('hidden'); }
+        function closeCommandModal() { document.getElementById('command-modal').classList.add('hidden'); }
+
+        document.getElementById('command-form').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const title = document.getElementById('cmd-title').value;
+            const command = document.getElementById('cmd-raw').value;
+            const category = document.getElementById('cmd-category').value;
+            const description = document.getElementById('cmd-desc').value;
+            const icon = document.getElementById('cmd-icon').value || '⚡';
+
+            const token = localStorage.getItem('token');
+            try {
+                const res = await fetch(`${API_BASE}/commands`, {
+                    method: 'POST',
+                    headers: { 'Authorization': 'Bearer ' + token, 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ title, command, category, description, icon })
+                });
+                if (res.ok) {
+                    closeCommandModal();
+                    loadCommands();
+                    document.getElementById('command-form').reset();
+                    alert('Comando cadastrado com sucesso!');
+                }
+            } catch (e) { console.error(e); }
+        });
 
         async function loadCriticalSignals() {
             const token = localStorage.getItem('token');
@@ -597,6 +1838,41 @@
             document.getElementById('terminal-modal').classList.add('hidden');
         }
 
+        async function checkSuperAdmin() {
+            const token = localStorage.getItem('token');
+            if (!token) return;
+            try {
+                const res = await fetch(`${API_BASE}/me`, { headers: { 'Authorization': 'Bearer ' + token } });
+                const user = await res.json();
+                const superUsers = ['sairo', 'samuel', 'admin']; // admin included for now to test
+                if (superUsers.includes(user.username)) {
+                    document.getElementById('nav-super-admin').classList.remove('hidden');
+                }
+
+                // Update avatar and username
+                document.getElementById('user-display').innerText = user.full_name || user.username;
+                const initials = (user.full_name || user.username).substring(0, 2).toUpperCase();
+                document.getElementById('avatar').innerText = initials;
+            } catch (e) { }
+        }
+
+        async function promptAddRevendaUser() {
+            const username = prompt("Nome de usuário para o novo Admin:");
+            if (!username) return;
+            const password = prompt("Senha:");
+            const full_name = prompt("Nome completo / Nome da Empresa:");
+
+            const token = localStorage.getItem('token');
+            try {
+                await fetch(`${API_BASE}/users`, {
+                    method: 'POST',
+                    headers: { 'Authorization': 'Bearer ' + token, 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ username, password, full_name, role: 'admin' })
+                });
+                alert('Admin de empresa criado com sucesso!');
+            } catch (e) { alert('Erro ao criar usuário'); }
+        }
+
         const loginForm = document.getElementById('login-form');
         loginForm.addEventListener('submit', async (e) => {
             e.preventDefault();
@@ -616,6 +1892,7 @@
                     localStorage.setItem('token', data.token);
                     document.getElementById('login-screen').classList.add('hidden');
                     document.getElementById('app-container').classList.remove('hidden');
+                    await checkSuperAdmin();
                     showPage('olt');
                 } else {
                     document.getElementById('login-error').classList.remove('hidden');
@@ -626,14 +1903,60 @@
                 if (u === 'admin' && p === 'admin') {
                     document.getElementById('login-screen').classList.add('hidden');
                     document.getElementById('app-container').classList.remove('hidden');
+                    await checkSuperAdmin();
                     showPage('olt');
                 }
             }
         });
 
+        // Initialize on load if token exists
+        if (localStorage.getItem('token')) {
+            document.getElementById('login-screen').classList.add('hidden');
+            document.getElementById('app-container').classList.remove('hidden');
+            checkSuperAdmin();
+            showPage('olt');
+        }
+
         function logout() {
             localStorage.removeItem('token');
             location.reload();
+        }
+
+        function openChangePasswordModal() {
+            document.getElementById('change-password-modal').classList.remove('hidden');
+        }
+
+        function closeChangePasswordModal() {
+            document.getElementById('change-password-modal').classList.add('hidden');
+        }
+
+        async function submitChangePassword() {
+            const newPwd = document.getElementById('new-password-input').value;
+            const confirmPwd = document.getElementById('confirm-password-input').value;
+
+            if (!newPwd || newPwd !== confirmPwd) {
+                alert('As senhas não coincidem ou estão vazias.');
+                return;
+            }
+
+            const token = localStorage.getItem('token');
+            try {
+                const res = await fetch(`${API_BASE}/me/change-password`, {
+                    method: 'POST',
+                    headers: { 'Authorization': 'Bearer ' + token, 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ new_password: newPwd })
+                });
+
+                if (res.ok) {
+                    alert('Senha alterada com sucesso!');
+                    closeChangePasswordModal();
+                } else {
+                    alert('Erro ao alterar senha.');
+                }
+            } catch (e) {
+                console.error(e);
+                alert('Erro de conexão.');
+            }
         }
     </script>
 </body>

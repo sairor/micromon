@@ -43,6 +43,7 @@ func main() {
     protected := apiRouter.PathPrefix("/v1").Subrouter()
     protected.Use(auth.JwtMiddleware)
     protected.HandleFunc("/me", auth.MeHandler).Methods("GET")
+    protected.HandleFunc("/me/change-password", auth.ChangePasswordHandler).Methods("POST")
     
     // Devices
     protected.HandleFunc("/devices", api.GetDevicesHandler).Methods("GET")
@@ -68,6 +69,20 @@ func main() {
     protected.HandleFunc("/onus/unregistered", api.GetUnregisteredOnusHandler).Methods("GET")
     protected.HandleFunc("/onus/install", api.InstallOnuHandler).Methods("POST")
 
+    // Backups
+    protected.HandleFunc("/backups/config", api.GetBackupConfigHandler).Methods("GET")
+    protected.HandleFunc("/backups/config", api.UpdateBackupConfigHandler).Methods("POST")
+    protected.HandleFunc("/backups", api.GetBackupsHandler).Methods("GET")
+    protected.HandleFunc("/backups/manual", api.ManualBackupHandler).Methods("POST")
+
+    // Schedules
+    protected.HandleFunc("/schedules", api.GetSchedulesHandler).Methods("GET")
+    protected.HandleFunc("/schedules", api.CreateScheduleHandler).Methods("POST")
+    protected.HandleFunc("/schedules", api.DeleteScheduleHandler).Methods("DELETE")
+
+    // Syslog
+    protected.HandleFunc("/logs", api.GetLogsHandler).Methods("GET")
+
 	// Serve Static Files (SPA)
 	// Assuming running from project root (/var/www/html/mikromon)
 	spa := spaHandler{staticPath: "web", indexPath: "index.html"}
@@ -86,6 +101,10 @@ func main() {
     }
 
 	log.Println("Micromon Server starting on :8080")
+    
+    // Start Syslog Server (UDP 514)
+    go api.StartSyslogServer()
+
 	log.Fatal(srv.ListenAndServe())
 }
 

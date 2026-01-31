@@ -3,14 +3,27 @@ main
 *.exe
 *.dll
 
-# Databases & Secrets
-*.db
-*.sqlite
-vpn.secrets
-config.json
-
 # Logs
 *.log
+nohup.out
 
-# OS
+# Databases
+*.db
+*.sqlite
+
+# Secrets
+vpn.secrets
+.env
+
+# System
 .DS_Store
+Thumbs.db
+
+# IDEs
+.vscode/
+.idea/
+
+# Testing
+mikromon_debug.db
+paramiko_debug.log
+server.log
